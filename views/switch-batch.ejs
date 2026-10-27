@@ -1,0 +1,33 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow"><%= batch.file_format %> · <%= label(batch.status) %></p>
+    <h1><%= batch.filename %></h1>
+    <p class="lede"><%= batch.loaded_count %> loaded, <%= batch.error_count %> rejected, of <%= batch.row_count %> staged rows. Uploaded <%= prettyDateTime(batch.uploaded_at) %>.</p>
+  </div>
+  <a class="btn" href="/switch">Load another file</a>
+</header>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Line</th><th>ATM</th><th>Date</th><th class="num">Amount</th><th class="num">Txns</th><th>Status</th><th>Error</th></tr>
+    </thead>
+    <tbody>
+      <% rows.forEach((row) => { %>
+        <tr class="<%= row.status === 'error' ? 'row-error' : '' %>">
+          <td><%= row.line_no %></td>
+          <td><%= row.atm_code || '—' %></td>
+          <td><%= row.txn_date ? prettyDate(row.txn_date) : '—' %></td>
+          <td class="num"><%= row.amount == null ? '—' : inr(row.amount) %></td>
+          <td class="num"><%= row.txn_count == null ? '—' : row.txn_count %></td>
+          <td><span class="pill <%= row.status %>"><%= row.status %></span></td>
+          <td><%= row.error_message || '' %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<details style="margin-top:14px">
+  <summary>Raw lines</summary>
+  <pre class="script"><% rows.forEach((row) => { %><%= row.raw_line %>
+<% }) %></pre>
+</details>

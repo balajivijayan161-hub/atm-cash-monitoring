@@ -1,0 +1,89 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">plan_replenishment_routes</p>
+    <h1>Replenishment runs</h1>
+    <p class="lede">The planner selects ATMs whose forecast exceeds cash still in the machine, groups them by location, and assigns a van and custodian. Each run holds the cassette loads for that trip.</p>
+  </div>
+  <div class="actions">
+    <a class="btn btn-primary" href="/runs/new">New run</a>
+  </div>
+</header>
+
+<form class="card filters" method="post" action="/runs/plan" style="padding:14px; margin-bottom:14px;">
+  <label class="field">Plan date
+    <input type="date" name="planned_date" value="<%= tomorrow %>" required>
+  </label>
+  <label class="field">Location
+    <select name="location_id">
+      <option value="">All locations</option>
+      <% locations.forEach((loc) => { %>
+        <option value="<%= loc.location_id %>"><%= loc.location_name %></option>
+      <% }) %>
+    </select>
+  </label>
+  <button class="btn btn-primary" type="submit">Plan routes</button>
+  <p class="hint" style="flex-basis:100%">Calls the PostgreSQL procedure. Running it again for the same date will not duplicate ATMs already on a run.</p>
+</form>
+
+<% if (plans.length) { %>
+  <p class="hint" style="margin-bottom:12px">Latest planner results:
+    <% plans.forEach((plan) => { %>
+      <%= prettyDate(plan.target_date) %> · <%= plan.runs_created %> runs · <%= plan.atms_assigned %> ATMs.
+    <% }) %>
+  </p>
+<% } %>
+
+<form class="filters" method="get" action="/runs">
+  <label class="field">Date
+    <input type="date" name="date" value="<%= filters.date %>">
+  </label>
+  <label class="field">Status
+    <select name="status">
+      <option value="">Any</option>
+      <% ['planned', 'in_progress', 'completed', 'cancelled'].forEach((status) => { %>
+        <option value="<%= status %>" <%= filters.status === status ? 'selected' : '' %>><%= label(status) %></option>
+      <% }) %>
+    </select>
+  </label>
+  <label class="field">Location
+    <select name="location_id">
+      <option value="">All</option>
+      <% locations.forEach((loc) => { %>
+        <option value="<%= loc.location_id %>" <%= String(filters.location_id) === String(loc.location_id) ? 'selected' : '' %>><%= loc.location_name %></option>
+      <% }) %>
+    </select>
+  </label>
+  <button class="btn" type="submit">Filter</button>
+</form>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Date</th><th>Location</th><th>Van</th><th>Custodian</th><th>Status</th><th class="num">Stops</th><th class="num">Total loaded</th><th></th></tr>
+    </thead>
+    <tbody>
+      <% if (!rows.length) { %>
+        <tr><td colspan="8" class="empty">No runs match. Plan a date, or record a run by hand.</td></tr>
+      <% } %>
+      <% rows.forEach((row) => { %>
+        <tr>
+          <td><%= prettyDate(row.planned_date) %></td>
+          <td><%= row.location_name %></td>
+          <td><%= row.van_code %></td>
+          <td><%= row.custodian_name %></td>
+          <td><span class="pill <%= String(row.status).replace(/_/g, '-') %>"><%= label(row.status) %></span></td>
+          <td class="num"><%= row.stops %></td>
+          <td class="num"><%= inr(row.total_loaded) %></td>
+          <td><a href="/runs/<%= row.run_id %>">Open</a></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% if (pages > 1) { %>
+  <nav class="pager">
+    <% if (page > 1) { %><a href="<%= pageHref('/runs', filters, page - 1) %>">Previous</a><% } %>
+    <span>Page <%= page %> of <%= pages %></span>
+    <% if (page < pages) { %><a href="<%= pageHref('/runs', filters, page + 1) %>">Next</a><% } %>
+  </nav>
+<% } %>

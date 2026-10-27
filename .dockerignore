@@ -1,0 +1,7 @@
+node_modules
+.env
+.git
+ej_logs
+ej_archive
+*.log
+npm-debug.log*

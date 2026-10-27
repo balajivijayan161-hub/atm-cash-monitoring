@@ -1,0 +1,47 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Grouped report</p>
+    <h1>Downtime by location</h1>
+    <p class="lede">Average month-to-date downtime for every ATM in the city, plus the minutes logged this month by reason.</p>
+  </div>
+</header>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Location</th><th>Region</th><th class="num">ATMs</th><th class="num">Above 5%</th><th class="num">Avg downtime</th><th class="num">Uptime</th><th>Relative</th><th class="num">Minutes</th></tr>
+    </thead>
+    <tbody>
+      <% if (!summary.length) { %><tr><td colspan="8" class="empty">No locations yet.</td></tr><% } %>
+      <% summary.forEach((row) => { %>
+        <tr>
+          <td><%= row.location_name %><br><span class="hint"><%= row.city %></span></td>
+          <td><%= row.region %></td>
+          <td class="num"><%= row.atms %></td>
+          <td class="num"><%= row.atms_above_5 %></td>
+          <td class="num"><%= pct(row.avg_downtime_pct) %></td>
+          <td class="num"><%= pct(row.uptime_pct) %></td>
+          <td><div class="bar-track"><span style="--w: <%= maxDowntime ? (Number(row.avg_downtime_pct) / maxDowntime) * 100 : 0 %>"></span></div></td>
+          <td class="num"><%= row.downtime_minutes %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<section class="section">
+  <h2>Minutes by reason</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Location</th><th>Reason</th><th class="num">Minutes this month</th></tr></thead>
+      <tbody>
+        <% if (!reasons.length) { %><tr><td colspan="3" class="empty">No downtime has been logged this month.</td></tr><% } %>
+        <% reasons.forEach((row) => { %>
+          <tr>
+            <td><%= row.location_name %></td>
+            <td><%= label(row.reason) %></td>
+            <td class="num"><%= row.minutes %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</section>

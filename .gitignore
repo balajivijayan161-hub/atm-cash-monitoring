@@ -1,0 +1,7 @@
+node_modules/
+.env
+*.log
+ej_logs/
+ej_archive/
+.DS_Store
+npm-debug.log*

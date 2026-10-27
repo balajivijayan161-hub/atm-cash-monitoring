@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= title %> · ATM Cash Operations</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">₹</div>
+        <div>
+          <strong>ATM Cash Ops</strong>
+          <span>Replenishment ledger</span>
+        </div>
+      </div>
+      <p class="nav-label">Monitor</p>
+      <nav class="nav" aria-label="Primary">
+        <a class="<%= navClass('/') %>" href="/"<% if (navClass('/')) { %> aria-current="page"<% } %>>Uptime dashboard</a>
+        <a class="<%= navClass('/atms') %>" href="/atms"<% if (navClass('/atms')) { %> aria-current="page"<% } %>>ATMs</a>
+        <a class="<%= navClass('/tickets') %>" href="/tickets"<% if (navClass('/tickets')) { %> aria-current="page"<% } %>>Fault tickets</a>
+      </nav>
+      <p class="nav-label">Cash</p>
+      <nav class="nav" aria-label="Cash">
+        <a class="<%= navClass('/forecast') %>" href="/forecast"<% if (navClass('/forecast')) { %> aria-current="page"<% } %>>Cash forecast</a>
+        <a class="<%= navClass('/runs') %>" href="/runs"<% if (navClass('/runs')) { %> aria-current="page"<% } %>>Replenishment</a>
+        <a class="<%= navClass('/reconciliations') %>" href="/reconciliations"<% if (navClass('/reconciliations')) { %> aria-current="page"<% } %>>Reconciliation</a>
+        <a class="<%= navClass('/switch') %>" href="/switch"<% if (navClass('/switch')) { %> aria-current="page"<% } %>>Switch file</a>
+      </nav>
+      <p class="nav-label">Reports</p>
+      <nav class="nav" aria-label="Reports">
+        <a class="<%= navClass('/reports/downtime-atms') %>" href="/reports/downtime-atms"<% if (navClass('/reports/downtime-atms')) { %> aria-current="page"<% } %>>Downtime above 5%</a>
+        <a class="<%= navClass('/reports/van-cashouts') %>" href="/reports/van-cashouts"<% if (navClass('/reports/van-cashouts')) { %> aria-current="page"<% } %>>Van cash-outs</a>
+        <a class="<%= navClass('/reports/withdrawal-matrix') %>" href="/reports/withdrawal-matrix"<% if (navClass('/reports/withdrawal-matrix')) { %> aria-current="page"<% } %>>Withdrawal matrix</a>
+        <a class="<%= navClass('/reports/downtime-by-location') %>" href="/reports/downtime-by-location"<% if (navClass('/reports/downtime-by-location')) { %> aria-current="page"<% } %>>Downtime by location</a>
+        <a class="<%= navClass('/operations/ej-archive') %>" href="/operations/ej-archive"<% if (navClass('/operations/ej-archive')) { %> aria-current="page"<% } %>>EJ log archive</a>
+      </nav>
+    </aside>
+    <div class="content">
+      <p class="demo-banner">Demo data — synthetic cash operations for a 450-ATM fleet. No live accounts or customer information.</p>
+      <% if (notice) { %><p class="banner ok" role="status"><%= notice %></p><% } %>
+      <% if (warning) { %><p class="banner bad" role="alert"><%= warning %></p><% } %>
+      <%- pageBody %>
+      <p class="colophon">PostgreSQL ledger for cash forecasting, van routes, cassette loads, reconciliation, and downtime. Oracle PL/SQL equivalents live in the <code>oracle/</code> folder of the source tree.</p>
+    </div>
+  </div>
+</body>
+</html>

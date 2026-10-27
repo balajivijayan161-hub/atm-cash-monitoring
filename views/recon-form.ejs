@@ -1,0 +1,49 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Trigger on insert</p>
+    <h1>Enter a reconciliation</h1>
+    <p class="lede">Save the expected cassette total and the physical count. If they differ, PostgreSQL raises a cash-variance ticket. The application does not insert that ticket itself.</p>
+  </div>
+</header>
+<% if (errors.length) { %>
+  <div class="errors" role="alert"><ul><% errors.forEach((item) => { %><li><%= item %></li><% }) %></ul></div>
+<% } %>
+<form method="post" action="/reconciliations" id="recon-form">
+  <div class="form-grid">
+    <label class="field grow" style="grid-column: span 2;">ATM
+      <select name="atm_id" required>
+        <option value="">Choose</option>
+        <% atms.forEach((atm) => { %>
+          <option value="<%= atm.atm_id %>" <%= String(form.atm_id) === String(atm.atm_id) ? 'selected' : '' %>><%= atm.atm_code %> — <%= atm.site_name %> (<%= atm.location_name %>)</option>
+        <% }) %>
+      </select>
+    </label>
+    <label class="field">Date
+      <input type="date" name="recon_date" value="<%= form.recon_date %>" required>
+    </label>
+    <label class="field">Run
+      <select name="run_id">
+        <option value="">None</option>
+        <% runs.forEach((run) => { %>
+          <option value="<%= run.run_id %>" <%= String(form.run_id) === String(run.run_id) ? 'selected' : '' %>><%= prettyDate(run.planned_date) %> · <%= run.van_code %> · <%= run.location_name %></option>
+        <% }) %>
+      </select>
+    </label>
+    <label class="field">Expected amount
+      <input id="expected_amount" name="expected_amount" inputmode="decimal" value="<%= form.expected_amount %>" required>
+    </label>
+    <label class="field">Counted amount
+      <input id="counted_amount" name="counted_amount" inputmode="decimal" value="<%= form.counted_amount %>" required>
+    </label>
+    <div class="field">
+      <span>Difference</span>
+      <strong id="difference" class="total-value" style="font-size:28px">—</strong>
+    </div>
+    <label class="field wide">Notes
+      <textarea name="notes"><%= form.notes %></textarea>
+    </label>
+  </div>
+  <p id="difference-hint" class="hint" hidden>This difference will raise a fault ticket when you save.</p>
+  <p style="margin-top:12px"><button class="btn btn-primary" type="submit">Save reconciliation</button></p>
+</form>
+<script src="/js/recon-form.js"></script>

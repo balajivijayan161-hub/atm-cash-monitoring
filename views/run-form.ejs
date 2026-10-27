@@ -1,0 +1,128 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Master and detail</p>
+    <h1><%= run ? 'Edit replenishment run' : 'New replenishment run' %></h1>
+    <p class="lede">The run is the master. Each row is one cassette. Total loaded is denomination times note count, summed across the rows, and it updates as you type.</p>
+  </div>
+</header>
+<% if (errors.length) { %>
+  <div class="errors" role="alert">
+    <ul><% errors.forEach((item) => { %><li><%= item %></li><% }) %></ul>
+  </div>
+<% } %>
+<form id="run-form" method="post" action="<%= action %>">
+  <div class="form-grid">
+    <label class="field">Run date
+      <input type="date" name="planned_date" value="<%= form.planned_date %>" required>
+    </label>
+    <label class="field">Location
+      <select name="location_id" id="location_id" required>
+        <option value="">Choose</option>
+        <% ref.locations.forEach((loc) => { %>
+          <option value="<%= loc.location_id %>" <%= String(form.location_id) === String(loc.location_id) ? 'selected' : '' %>><%= loc.location_name %></option>
+        <% }) %>
+      </select>
+    </label>
+    <label class="field">Cash van
+      <select name="van_id" id="van_id" required>
+        <option value="">Choose</option>
+        <% ref.vans.forEach((van) => { %>
+          <option value="<%= van.van_id %>" data-location="<%= van.location_id %>" <%= String(form.van_id) === String(van.van_id) ? 'selected' : '' %>><%= van.van_code %> · <%= label(van.status) %></option>
+        <% }) %>
+      </select>
+    </label>
+    <label class="field">Custodian
+      <select name="custodian_id" id="custodian_id" required>
+        <option value="">Choose</option>
+        <% ref.custodians.forEach((person) => { %>
+          <option value="<%= person.custodian_id %>" data-van="<%= person.van_id %>" <%= String(form.custodian_id) === String(person.custodian_id) ? 'selected' : '' %>><%= person.full_name %></option>
+        <% }) %>
+      </select>
+    </label>
+    <label class="field">Status
+      <select name="status">
+        <% ['planned', 'in_progress', 'completed', 'cancelled'].forEach((status) => { %>
+          <option value="<%= status %>" <%= form.status === status ? 'selected' : '' %>><%= label(status) %></option>
+        <% }) %>
+      </select>
+    </label>
+    <label class="field wide">Notes
+      <textarea name="notes"><%= form.notes %></textarea>
+    </label>
+  </div>
+  <div class="split">
+    <div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>ATM code</th><th>Cassette</th><th>Denomination</th><th>Note count</th><th class="num">Amount</th><th></th></tr>
+          </thead>
+          <tbody id="load-rows">
+            <% lines.forEach((line) => { %>
+              <tr>
+                <td><input name="atm_code" list="atm-codes" value="<%= line.atmCode %>" placeholder="ATM-MUM-0001" autocomplete="off"></td>
+                <td>
+                  <select name="cassette_number">
+                    <% [1, 2, 3, 4].forEach((n) => { %>
+                      <option value="<%= n %>" <%= String(line.cassette) === String(n) ? 'selected' : '' %>><%= n %></option>
+                    <% }) %>
+                  </select>
+                </td>
+                <td>
+                  <select name="denomination">
+                    <% [100, 200, 500, 2000].forEach((n) => { %>
+                      <option value="<%= n %>" <%= String(line.denomination) === String(n) ? 'selected' : '' %>><%= n %></option>
+                    <% }) %>
+                  </select>
+                </td>
+                <td><input name="note_count" type="number" min="1" max="10000" step="1" value="<%= line.noteCount %>"></td>
+                <td class="line-amount num"><%= inr(line.amount || 0) %></td>
+                <td><button class="btn btn-ghost remove-row" type="button">Remove</button></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:10px"><button class="btn" id="add-load" type="button">Add cassette row</button></p>
+      <datalist id="atm-codes">
+        <% ref.atms.forEach((atm) => { %>
+          <option value="<%= atm.atm_code %>"><%= atm.site_name %>, <%= atm.location_name %></option>
+        <% }) %>
+      </datalist>
+    </div>
+    <aside class="total-panel">
+      <p class="eyebrow">Calculated item</p>
+      <p class="total-label">Total loaded</p>
+      <p id="total-loaded" class="total-value" aria-live="polite"><%= inr(total) %></p>
+      <p class="hint">Sum of denomination × note count on every cassette row.</p>
+      <% if (run && run.created_by) { %><p class="hint">Created by <%= run.created_by %>.</p><% } %>
+      <p style="margin-top:14px"><button class="btn btn-primary" type="submit">Save run</button></p>
+    </aside>
+  </div>
+</form>
+<% if (run) { %>
+  <form method="post" action="/runs/<%= run.run_id %>/delete" style="margin-top:16px" onsubmit="return confirm('Delete this run and its cassette loads?');">
+    <button class="btn btn-danger" type="submit">Delete run</button>
+  </form>
+<% } %>
+<template id="load-row-template">
+  <tr>
+    <td><input name="atm_code" list="atm-codes" placeholder="ATM-MUM-0001" autocomplete="off"></td>
+    <td>
+      <select name="cassette_number">
+        <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option>
+      </select>
+    </td>
+    <td>
+      <select name="denomination">
+        <option value="100">100</option><option value="200">200</option><option value="500">500</option><option value="2000" selected>2000</option>
+      </select>
+    </td>
+    <td><input name="note_count" type="number" min="1" max="10000" step="1" value=""></td>
+    <td class="line-amount num">—</td>
+    <td><button class="btn btn-ghost remove-row" type="button">Remove</button></td>
+  </tr>
+</template>
+<script id="ref-data" type="application/json"><%- jsonScript(ref.atms.map((atm) => ({ code: atm.atm_code, locationId: atm.location_id, label: atm.atm_code + ' — ' + atm.site_name }))) %></script>
+<script src="/js/money.js"></script>
+<script src="/js/run-form.js"></script>

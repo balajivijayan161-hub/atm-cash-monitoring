@@ -1,0 +1,145 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Month to date</p>
+    <h1>Fleet uptime</h1>
+    <p class="lede">Availability, cash-out pressure, and how weekend withdrawals sit against the cash still in the machines.</p>
+  </div>
+</header>
+
+<section class="kpi-grid" aria-label="Fleet indicators">
+  <article class="kpi">
+    <span>Fleet uptime</span>
+    <strong><%= uptime == null ? '—' : pct(uptime) %></strong>
+    <em><%= fleet.atms || 0 %> ATMs in the elapsed month</em>
+  </article>
+  <article class="kpi">
+    <span>Above 5% downtime</span>
+    <strong><%= fleet.above_five || 0 %></strong>
+    <em><a href="/reports/downtime-atms">Open the exception list</a></em>
+  </article>
+  <article class="kpi">
+    <span>Open fault tickets</span>
+    <strong><%= tickets.open_tickets || 0 %></strong>
+    <em><%= tickets.open_variances || 0 %> from cash variances</em>
+  </article>
+  <article class="kpi">
+    <span>Cash-out or down</span>
+    <strong><%= (fleet.cash_out || 0) + (fleet.out_of_service || 0) %></strong>
+    <em><%= fleet.cash_out || 0 %> empty · <%= fleet.out_of_service || 0 %> out of service</em>
+  </article>
+  <article class="kpi">
+    <span>Dispensed yesterday</span>
+    <strong><%= inr(dispensed.amount) %></strong>
+    <em><%= dispensed.txns || 0 %> switch transactions</em>
+  </article>
+  <article class="kpi">
+    <span>Runs today</span>
+    <strong><%= runs.today_runs || 0 %></strong>
+    <em><%= runs.tomorrow_planned || 0 %> already planned for tomorrow</em>
+  </article>
+</section>
+
+<section class="chart-grid">
+  <article class="card">
+    <h3>Uptime by location</h3>
+    <canvas id="uptime-chart" height="140"></canvas>
+  </article>
+  <article class="card">
+    <h3>Downtime minutes, last 14 days</h3>
+    <canvas id="day-chart" height="140"></canvas>
+  </article>
+</section>
+
+<section class="section card">
+  <h3>Withdrawals by weekday, last 8 weeks</h3>
+  <p class="hint">Friday and Saturday should stand above the midweek columns. That spike is what empties cassettes before Monday.</p>
+  <canvas id="weekday-chart" height="90"></canvas>
+</section>
+
+<section class="section two-col">
+  <div>
+    <h2>Lowest availability</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>ATM</th><th>Location</th><th>Status</th><th class="num">Downtime</th></tr>
+        </thead>
+        <tbody>
+          <% if (!worst.length) { %>
+            <tr><td colspan="4" class="empty">No ATMs on the ledger yet.</td></tr>
+          <% } %>
+          <% worst.forEach((row) => { %>
+            <tr>
+              <td><a href="/atms/<%= row.atm_id %>"><%= row.atm_code %></a><br><span class="hint"><%= row.site_name %></span></td>
+              <td><%= row.location_name %></td>
+              <td><span class="pill <%= String(row.status).replace(/_/g, '-') %>"><%= label(row.status) %></span></td>
+              <td class="num"><%= pct(row.downtime_pct) %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div>
+    <h2>Latest tickets</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Ticket</th><th>ATM</th><th>Status</th></tr></thead>
+        <tbody>
+          <% if (!recentTickets.length) { %>
+            <tr><td colspan="3" class="empty">No fault tickets yet.</td></tr>
+          <% } %>
+          <% recentTickets.forEach((row) => { %>
+            <tr>
+              <td><a href="/tickets"><%= row.ticket_no %></a><br><span class="hint"><%= row.title %></span></td>
+              <td><%= row.atm_code %></td>
+              <td><span class="pill <%= row.status %>"><%= row.status %></span></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Where the work is</h2>
+  <div class="link-grid">
+    <a href="/forecast"><strong>Cash forecast</strong><span>Calls forecast_cash for one ATM and shows the four same-weekday withdrawals behind it.</span></a>
+    <a href="/runs"><strong>Plan replenishment</strong><span>plan_replenishment_routes groups ATMs whose forecast exceeds remaining cash onto vans and custodians.</span></a>
+    <a href="/runs/new"><strong>Cassette loads</strong><span>Master run with detail rows. Total loaded recalculates as note counts change.</span></a>
+    <a href="/reconciliations/new"><strong>Reconciliation trigger</strong><span>A non-zero expected-versus-counted difference raises a fault ticket in the database.</span></a>
+    <a href="/reports/downtime-atms"><strong>Downtime above 5%</strong><span>ATMs whose month-to-date outage exceeds 5% of elapsed minutes.</span></a>
+    <a href="/reports/van-cashouts"><strong>Van cash-outs</strong><span>Cash vans ranked by cash-out tickets on the ATMs they actually load.</span></a>
+    <a href="/reports/withdrawal-matrix"><strong>ATM × weekday</strong><span>Withdrawal totals for the last eight weeks, one location at a time.</span></a>
+    <a href="/reports/downtime-by-location"><strong>Downtime by location</strong><span>Outage minutes and uptime rolled up to each city.</span></a>
+    <a href="/switch"><strong>Switch file load</strong><span>Validate, stage, and post a CSV or fixed-width file into daily withdrawals.</span></a>
+  </div>
+</section>
+
+<script src="/vendor/chart.umd.js"></script>
+<script>
+  const charts = <%- jsonScript(charts) %>;
+  if (typeof Chart !== 'undefined') {
+    Chart.defaults.font.family = 'Outfit, sans-serif';
+    Chart.defaults.color = '#5e574c';
+    const brass = '#8d6a3a';
+    const ink = '#1b2421';
+    const clay = '#8d2f2f';
+    new Chart(document.getElementById('uptime-chart'), {
+      type: 'bar',
+      data: { labels: charts.locations, datasets: [{ label: 'Uptime %', data: charts.uptime, backgroundColor: ink, borderRadius: 4 }] },
+      options: { plugins: { legend: { display: false } }, scales: { y: { min: 80, max: 100 } } }
+    });
+    new Chart(document.getElementById('day-chart'), {
+      type: 'line',
+      data: { labels: charts.days, datasets: [{ label: 'Minutes', data: charts.downtimeMinutes, borderColor: clay, backgroundColor: 'rgba(141,47,47,0.12)', fill: true, tension: 0.25 }] },
+      options: { plugins: { legend: { display: false } } }
+    });
+    new Chart(document.getElementById('weekday-chart'), {
+      type: 'bar',
+      data: { labels: charts.weekdays, datasets: [{ label: 'Dispensed', data: charts.weekdayAmounts, backgroundColor: charts.weekdays.map((day) => (day === 'Fri' || day === 'Sat' || day === 'Sun') ? brass : '#cfc3ae'), borderRadius: 4 }] },
+      options: { plugins: { legend: { display: false } } }
+    });
+  }
+</script>

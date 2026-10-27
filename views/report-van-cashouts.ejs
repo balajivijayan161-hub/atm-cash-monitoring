@@ -1,0 +1,28 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">v_van_cashout_incidents</p>
+    <h1>Cash-outs on van routes</h1>
+    <p class="lede">A cash-out incident is a fault ticket in that category for an ATM that appears in the van’s cassette loads. Each ticket counts once for the van. Vans with an empty route still appear, at zero.</p>
+  </div>
+</header>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Van</th><th>Location</th><th>Registration</th><th>Status</th><th class="num">ATMs on route</th><th class="num">Cash-outs</th><th>Share</th></tr>
+    </thead>
+    <tbody>
+      <% if (!rows.length) { %><tr><td colspan="7" class="empty">No cash vans are on the ledger.</td></tr><% } %>
+      <% rows.forEach((row) => { %>
+        <tr>
+          <td><%= row.van_code %></td>
+          <td><%= row.location_name %></td>
+          <td><%= row.registration_no %></td>
+          <td><span class="pill <%= String(row.van_status).replace(/_/g, '-') %>"><%= label(row.van_status) %></span></td>
+          <td class="num"><%= row.atms_on_route %></td>
+          <td class="num"><%= row.cashout_incidents %></td>
+          <td><div class="bar-track" aria-hidden="true"><span style="--w: <%= max ? (Number(row.cashout_incidents) / max) * 100 : 0 %>"></span></div></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>

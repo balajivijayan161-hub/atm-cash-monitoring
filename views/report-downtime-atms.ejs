@@ -1,0 +1,30 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">v_atm_downtime_above_5pct</p>
+    <h1>ATMs above 5% downtime</h1>
+    <p class="lede">Month to date, from <%= prettyDateTime(monthStart) %> through <%= prettyDateTime(periodEnd) %>. Downtime minutes overlapping that window, divided by elapsed minutes. The cut is strictly above 5%.</p>
+  </div>
+</header>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>ATM</th><th>Site</th><th>Location</th><th>Status</th><th class="num">Minutes</th><th class="num">Downtime</th><th class="num">Uptime</th></tr>
+    </thead>
+    <tbody>
+      <% if (!rows.length) { %>
+        <tr><td colspan="7" class="empty">No ATM is above 5% downtime this month.</td></tr>
+      <% } %>
+      <% rows.forEach((row) => { %>
+        <tr>
+          <td><a href="/atms/<%= row.atm_id %>"><%= row.atm_code %></a></td>
+          <td><%= row.site_name %></td>
+          <td><%= row.location_name %>, <%= row.city %></td>
+          <td><span class="pill <%= String(row.status).replace(/_/g, '-') %>"><%= label(row.status) %></span></td>
+          <td class="num"><%= row.downtime_minutes %></td>
+          <td class="num"><%= pct(row.downtime_pct) %></td>
+          <td class="num"><%= pct(100 - Number(row.downtime_pct)) %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>

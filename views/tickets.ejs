@@ -1,0 +1,71 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Service desk</p>
+    <h1>Fault tickets</h1>
+    <p class="lede">Variance tickets arrive from the reconciliation trigger. Assign an engineer or close the ticket once the site is back.</p>
+  </div>
+</header>
+<form class="filters" method="get" action="/tickets">
+  <label class="field">Status
+    <select name="status">
+      <option value="">Any</option>
+      <% statuses.forEach((status) => { %>
+        <option value="<%= status %>" <%= filters.status === status ? 'selected' : '' %>><%= status %></option>
+      <% }) %>
+    </select>
+  </label>
+  <label class="field">Category
+    <select name="category">
+      <option value="">Any</option>
+      <% categories.forEach((category) => { %>
+        <option value="<%= category %>" <%= filters.category === category ? 'selected' : '' %>><%= label(category) %></option>
+      <% }) %>
+    </select>
+  </label>
+  <button class="btn" type="submit">Filter</button>
+</form>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Ticket</th><th>ATM</th><th>Category</th><th>Priority</th><th>Status</th><th>Engineer</th><th>Assign</th><th>Close</th></tr>
+    </thead>
+    <tbody>
+      <% if (!rows.length) { %><tr><td colspan="8" class="empty">No tickets match.</td></tr><% } %>
+      <% rows.forEach((row) => { %>
+        <tr>
+          <td>
+            <%= row.ticket_no %><br>
+            <span class="hint"><%= row.title %></span><br>
+            <span class="pill <%= row.source %>"><%= row.source %></span>
+          </td>
+          <td><a href="/atms/<%= row.atm_id %>"><%= row.atm_code %></a><br><span class="hint"><%= row.location_name %></span></td>
+          <td><%= label(row.category) %></td>
+          <td><span class="pill <%= row.priority %>"><%= row.priority %></span></td>
+          <td><span class="pill <%= row.status %>"><%= row.status %></span></td>
+          <td><%= row.engineer_name || '—' %></td>
+          <td>
+            <% if (row.status !== 'closed') { %>
+              <form method="post" action="/tickets/<%= row.ticket_id %>/assign">
+                <select name="engineer_id" aria-label="Engineer for <%= row.ticket_no %>">
+                  <option value="">Engineer</option>
+                  <% engineers.forEach((eng) => { %>
+                    <option value="<%= eng.engineer_id %>"><%= eng.full_name %></option>
+                  <% }) %>
+                </select>
+                <button class="btn" type="submit">Assign</button>
+              </form>
+            <% } else { %>—<% } %>
+          </td>
+          <td>
+            <% if (row.status !== 'closed') { %>
+              <form method="post" action="/tickets/<%= row.ticket_id %>/close">
+                <input name="resolution" placeholder="Resolution" aria-label="Resolution for <%= row.ticket_no %>">
+                <button class="btn" type="submit">Close</button>
+              </form>
+            <% } else { %><%= prettyDateTime(row.closed_at) %><% } %>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>

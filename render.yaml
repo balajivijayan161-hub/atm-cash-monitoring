@@ -1,0 +1,26 @@
+# Render Blueprint: web service + Postgres.
+# Free-plan names below match Render's blueprint schema. If your account
+# no longer offers a free Postgres, create a Neon database and set DATABASE_URL
+# on the web service instead. The app only needs a Postgres connection string.
+
+databases:
+  - name: atm-cash-db
+    plan: free
+    databaseName: atm_cash
+    user: atm_cash_user
+
+services:
+  - type: web
+    name: atm-cash-monitoring
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: atm-cash-db
+          property: connectionString

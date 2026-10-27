@@ -1,0 +1,62 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Fleet</p>
+    <h1>ATMs</h1>
+    <p class="lede"><%= total %> machines across branches. Search by code, site, or branch.</p>
+  </div>
+</header>
+<form class="filters" method="get" action="/atms">
+  <label class="field grow">Search
+    <input name="q" value="<%= filters.q %>" placeholder="ATM code, site, or branch">
+  </label>
+  <label class="field">Location
+    <select name="location_id">
+      <option value="">All locations</option>
+      <% locations.forEach((loc) => { %>
+        <option value="<%= loc.location_id %>" <%= String(filters.location_id) === String(loc.location_id) ? 'selected' : '' %>><%= loc.location_name %></option>
+      <% }) %>
+    </select>
+  </label>
+  <label class="field">Status
+    <select name="status">
+      <option value="">Any status</option>
+      <% ['active', 'cash_out', 'out_of_service'].forEach((status) => { %>
+        <option value="<%= status %>" <%= filters.status === status ? 'selected' : '' %>><%= label(status) %></option>
+      <% }) %>
+    </select>
+  </label>
+  <button class="btn btn-primary" type="submit">Filter</button>
+</form>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>ATM</th><th>Site</th><th>Branch</th><th>Location</th><th>Status</th>
+        <th class="num">Cash now</th><th class="num">Downtime</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% if (!rows.length) { %>
+        <tr><td colspan="7" class="empty">No ATMs match that filter.</td></tr>
+      <% } %>
+      <% rows.forEach((row) => { %>
+        <tr>
+          <td><a href="/atms/<%= row.atm_id %>"><%= row.atm_code %></a></td>
+          <td><%= row.site_name %></td>
+          <td><%= row.branch_name %></td>
+          <td><%= row.city %></td>
+          <td><span class="pill <%= String(row.status).replace(/_/g, '-') %>"><%= label(row.status) %></span></td>
+          <td class="num"><%= inr(row.current_cash) %></td>
+          <td class="num"><%= pct(row.downtime_pct) %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% if (pages > 1) { %>
+  <nav class="pager" aria-label="Pages">
+    <% if (page > 1) { %><a href="<%= pageHref('/atms', filters, page - 1) %>">Previous</a><% } %>
+    <span>Page <%= page %> of <%= pages %></span>
+    <% if (page < pages) { %><a href="<%= pageHref('/atms', filters, page + 1) %>">Next</a><% } %>
+  </nav>
+<% } %>

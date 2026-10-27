@@ -1,0 +1,48 @@
+<% const dayLabel = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' }; %>
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Last 8 weeks</p>
+    <h1>Withdrawals by ATM and weekday</h1>
+    <p class="lede">Cell values are the sum dispensed on that weekday. One location at a time, so the matrix stays readable across the fleet.</p>
+  </div>
+</header>
+<form class="filters" method="get" action="/reports/withdrawal-matrix">
+  <label class="field">Location
+    <select name="location_id">
+      <% locations.forEach((loc) => { %>
+        <option value="<%= loc.location_id %>" <%= String(locationId) === String(loc.location_id) ? 'selected' : '' %>><%= loc.location_name %></option>
+      <% }) %>
+    </select>
+  </label>
+  <button class="btn" type="submit">Show</button>
+</form>
+<div class="table-wrap">
+  <table class="matrix">
+    <thead>
+      <tr>
+        <th>ATM</th><th>Site</th>
+        <% keys.forEach((key) => { %><th class="num"><%= dayLabel[key] %></th><% }) %>
+      </tr>
+    </thead>
+    <tbody>
+      <% if (!rows.length) { %><tr><td colspan="9" class="empty">No withdrawals for this location.</td></tr><% } %>
+      <% rows.forEach((row) => { %>
+        <tr>
+          <td><a href="/atms/<%= row.atm_id %>"><%= row.atm_code %></a></td>
+          <td><%= row.site_name %></td>
+          <% keys.forEach((key) => { %>
+            <td class="num" style="--heat: <%= max ? Number(row[key]) / max : 0 %>"><%= inr(row[key]) %></td>
+          <% }) %>
+        </tr>
+      <% }) %>
+    </tbody>
+    <% if (rows.length) { %>
+      <tfoot>
+        <tr class="totals">
+          <td colspan="2">Location total</td>
+          <% keys.forEach((key) => { %><td class="num"><%= inr(totals[key]) %></td><% }) %>
+        </tr>
+      </tfoot>
+    <% } %>
+  </table>
+</div>

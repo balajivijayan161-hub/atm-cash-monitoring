@@ -1,0 +1,111 @@
+const { normalizeLoads } = require('../lib/loads');
+const { isIsoDate, intOrNull } = require('../http');
+
+const RUN_STATUSES = new Set(['planned', 'in_progress', 'completed', 'cancelled']);
+
+async function saveRun(client, body, runId = null) {
+  const errors = [];
+  const locationId = intOrNull(body.location_id);
+  const vanId = intOrNull(body.van_id);
+  const custodianId = intOrNull(body.custodian_id);
+  const plannedDate = typeof body.planned_date === 'string' ? body.planned_date : '';
+  const status = body.status;
+  const notes = String(body.notes || '').trim().slice(0, 2000);
+
+  if (!isIsoDate(plannedDate)) errors.push('Choose a valid run date.');
+  if (!locationId) errors.push('Choose a location.');
+  if (!vanId) errors.push('Choose a cash van.');
+  if (!custodianId) errors.push('Choose a custodian.');
+  if (!RUN_STATUSES.has(status)) errors.push('Choose a run status.');
+
+  const normalized = normalizeLoads(body);
+  errors.push(...normalized.errors);
+
+  if (vanId && locationId) {
+    const vanRes = await client.query(
+      'SELECT van_id, location_id FROM cash_vans WHERE van_id = $1',
+      [vanId]
+    );
+    if (!vanRes.rowCount) errors.push('That cash van is not on the ledger.');
+    else if (vanRes.rows[0].location_id !== locationId) errors.push('The van is based in a different location.');
+  }
+
+  if (custodianId) {
+    const custodianRes = await client.query(
+      'SELECT custodian_id, van_id, active FROM custodians WHERE custodian_id = $1',
+      [custodianId]
+    );
+    const custodian = custodianRes.rows[0];
+    if (!custodian || !custodian.active) errors.push('Choose an active custodian.');
+    else if (vanId && custodian.van_id !== vanId) errors.push('That custodian is not assigned to this van.');
+  }
+
+  const codes = [...new Set(normalized.lines.map((line) => line.atmCode).filter(Boolean))];
+  const atmMap = new Map();
+  if (codes.length) {
+    const atms = await client.query(
+      `SELECT a.atm_id, a.atm_code, b.location_id
+       FROM atms a
+       JOIN branches b ON b.branch_id = a.branch_id
+       WHERE a.atm_code = ANY($1::text[])`,
+      [codes]
+    );
+    for (const atm of atms.rows) atmMap.set(atm.atm_code, atm);
+  }
+  for (const line of normalized.lines) {
+    if (!line.amount) continue;
+    const atm = atmMap.get(line.atmCode);
+    if (!atm) errors.push(`${line.atmCode} is not an ATM on this ledger.`);
+    else if (locationId && atm.location_id !== locationId) errors.push(`${line.atmCode} is not in the selected location.`);
+    else line.atmId = atm.atm_id;
+  }
+
+  const form = {
+    location_id: locationId || '',
+    van_id: vanId || '',
+    custodian_id: custodianId || '',
+    planned_date: plannedDate,
+    status: RUN_STATUSES.has(status) ? status : 'planned',
+    notes,
+  };
+
+  if (errors.length) {
+    return { errors, form, lines: normalized.lines, total: normalized.total };
+  }
+
+  let id = runId;
+  if (id) {
+    const updated = await client.query(
+      `UPDATE replenishment_runs
+       SET van_id = $2, custodian_id = $3, location_id = $4, planned_date = $5, status = $6, notes = $7
+       WHERE run_id = $1
+       RETURNING run_id`,
+      [id, vanId, custodianId, locationId, plannedDate, status, notes || null]
+    );
+    if (!updated.rowCount) {
+      return { errors: ['That run no longer exists.'], form, lines: normalized.lines, total: normalized.total };
+    }
+    await client.query('DELETE FROM cassette_loads WHERE run_id = $1', [id]);
+  } else {
+    const inserted = await client.query(
+      `INSERT INTO replenishment_runs
+         (van_id, custodian_id, location_id, planned_date, status, notes, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, 'operator')
+       RETURNING run_id`,
+      [vanId, custodianId, locationId, plannedDate, status, notes || null]
+    );
+    id = inserted.rows[0].run_id;
+  }
+
+  for (const line of normalized.lines) {
+    await client.query(
+      `INSERT INTO cassette_loads (run_id, atm_id, cassette_number, denomination, note_count, amount)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [id, line.atmId, line.cassette, line.denomination, line.noteCount, line.amount]
+    );
+  }
+
+  return { runId: id, total: normalized.total };
+}
+
+module.exports = { saveRun, RUN_STATUSES };

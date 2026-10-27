@@ -1,0 +1,117 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow"><%= atm.location_name %> · <%= atm.city %></p>
+    <h1><%= atm.atm_code %></h1>
+    <p class="lede"><%= atm.site_name %>, <%= atm.branch_name %>. <%= atm.address %>.</p>
+  </div>
+  <div class="actions">
+    <a class="btn" href="/forecast?atm_id=<%= atm.atm_id %>">Forecast</a>
+    <a class="btn" href="/reconciliations/new?atm_id=<%= atm.atm_id %>">Reconcile</a>
+  </div>
+</header>
+<dl class="meta">
+  <div><dt>Status</dt><dd><span class="pill <%= String(atm.status).replace(/_/g, '-') %>"><%= label(atm.status) %></span></dd></div>
+  <div><dt>Cash in machine</dt><dd><%= inr(atm.current_cash) %></dd></div>
+  <div><dt>Capacity</dt><dd><%= inr(atm.capacity_amount) %></dd></div>
+  <div><dt>Uptime this month</dt><dd><%= atm.downtime_pct == null ? '—' : pct(100 - Number(atm.downtime_pct)) %></dd></div>
+  <div><dt>Downtime minutes</dt><dd><%= atm.downtime_minutes == null ? '—' : atm.downtime_minutes %></dd></div>
+  <div><dt>Last replenished</dt><dd><%= prettyDate(atm.last_replenished_on) %></dd></div>
+  <div><dt>Installed</dt><dd><%= prettyDate(atm.installed_on) %></dd></div>
+  <div><dt>Branch code</dt><dd><%= atm.branch_code %> · <%= atm.ifsc_code %></dd></div>
+</dl>
+
+<section class="section">
+  <h2>Next seven days</h2>
+  <p class="hint">Each figure is forecast_cash for that date: the average of the same weekday over the prior 28 days.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Date</th><th class="num">Forecast</th><th>Covered by cash now</th></tr></thead>
+      <tbody>
+        <% forecast.forEach((row) => { %>
+          <tr>
+            <td><%= prettyDate(row.day) %></td>
+            <td class="num"><%= inr(row.forecast) %></td>
+            <td><%= Number(atm.current_cash) >= Number(row.forecast) ? 'Yes' : 'Short' %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section two-col">
+  <div>
+    <h2>Recent withdrawals</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Date</th><th class="num">Amount</th><th class="num">Txns</th><th>Source</th></tr></thead>
+        <tbody>
+          <% withdrawals.forEach((row) => { %>
+            <tr>
+              <td><%= prettyDate(row.withdrawal_date) %></td>
+              <td class="num"><%= inr(row.amount) %></td>
+              <td class="num"><%= row.txn_count %></td>
+              <td><%= row.source %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div>
+    <h2>Downtime</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>From</th><th>To</th><th>Reason</th></tr></thead>
+        <tbody>
+          <% if (!downtime.length) { %><tr><td colspan="3" class="empty">No downtime logged for this ATM.</td></tr><% } %>
+          <% downtime.forEach((row) => { %>
+            <tr>
+              <td><%= prettyDateTime(row.started_at) %></td>
+              <td><%= row.ended_at ? prettyDateTime(row.ended_at) : 'Ongoing' %></td>
+              <td><%= label(row.reason) %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <h2 style="margin-top:18px">Tickets</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Ticket</th><th>Status</th></tr></thead>
+        <tbody>
+          <% if (!tickets.length) { %><tr><td colspan="2" class="empty">No tickets.</td></tr><% } %>
+          <% tickets.forEach((row) => { %>
+            <tr>
+              <td><a href="/tickets"><%= row.ticket_no %></a><br><span class="hint"><%= row.title %></span></td>
+              <td><span class="pill <%= row.status %>"><%= row.status %></span></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Recent cassette loads</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Date</th><th>Van</th><th>Cassette</th><th class="num">Denomination</th><th class="num">Notes</th><th class="num">Amount</th><th>Run</th></tr></thead>
+      <tbody>
+        <% if (!loads.length) { %><tr><td colspan="7" class="empty">No cassette loads yet.</td></tr><% } %>
+        <% loads.forEach((row) => { %>
+          <tr>
+            <td><%= prettyDate(row.planned_date) %></td>
+            <td><%= row.van_code %></td>
+            <td><%= row.cassette_number %></td>
+            <td class="num"><%= inr(row.denomination) %></td>
+            <td class="num"><%= row.note_count %></td>
+            <td class="num"><%= inr(row.amount) %></td>
+            <td><%= label(row.status) %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</section>

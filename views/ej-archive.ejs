@@ -1,0 +1,26 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Host batch</p>
+    <h1>Electronic journal archive</h1>
+    <p class="lede">Daily ATM journal files are compressed by the date in the filename, moved into an archive directory, and purged once they are older than the retention window. The web app does not run the script; operations runs it on the host.</p>
+  </div>
+</header>
+<section class="card">
+  <h3>Command</h3>
+  <pre class="script">scripts/archive_ej_logs.sh --source ./ej_logs --archive ./ej_archive --retain-days 90</pre>
+  <p class="hint" style="margin-top:8px">A sample journal is in <code>samples/ej/</code>. Copy it into <code>ej_logs/</code> before a trial run. The script writes <code>archive.log</code> in the archive directory and echoes the same lines to standard output.</p>
+</section>
+<section class="section">
+  <h2>What it does</h2>
+  <ol>
+    <li>Finds <code>.log</code>, <code>.ej</code>, and <code>.jrn</code> files under the source directory.</li>
+    <li>Reads the journal date from <code>YYYY-MM-DD</code> or <code>YYYYMMDD</code> in the filename, otherwise the file’s modification time.</li>
+    <li>Gzip-compresses the file and moves it to <code>archive/YYYY-MM-DD/&lt;original path&gt;</code>.</li>
+    <li>Deletes archived day folders older than the retention count.</li>
+    <li>Leaves a timestamped log of every archive and purge.</li>
+  </ol>
+</section>
+<details>
+  <summary>Read scripts/archive_ej_logs.sh</summary>
+  <pre class="script"><%= script %></pre>
+</details>

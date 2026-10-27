@@ -1,0 +1,67 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">forecast_cash</p>
+    <h1>Cash forecast</h1>
+    <p class="lede">The database function averages this ATM’s withdrawals on the same weekday across the previous 28 days. That is up to four observations.</p>
+  </div>
+</header>
+<form class="filters" method="get" action="/forecast">
+  <label class="field grow">ATM
+    <select name="atm_id" required>
+      <option value="">Choose an ATM</option>
+      <% groups.forEach((group) => { %>
+        <optgroup label="<%= group.location_name %>">
+          <% group.atms.forEach((atm) => { %>
+            <option value="<%= atm.atm_id %>" <%= String(atmId) === String(atm.atm_id) ? 'selected' : '' %>><%= atm.atm_code %> — <%= atm.site_name %></option>
+          <% }) %>
+        </optgroup>
+      <% }) %>
+    </select>
+  </label>
+  <label class="field">Date
+    <input type="date" name="date" value="<%= targetDate %>" required>
+  </label>
+  <button class="btn btn-primary" type="submit">Forecast</button>
+</form>
+<% if (error) { %><p class="banner bad" role="alert"><%= error %></p><% } %>
+<% if (!groups.length) { %><p class="empty">No ATMs are on the ledger yet.</p><% } %>
+<% if (result) { %>
+  <section class="kpi-grid">
+    <article class="kpi">
+      <span>Forecast for <%= result.weekday %></span>
+      <strong><%= inr(result.forecast) %></strong>
+      <em><%= result.points.length %> same-weekday point<%= result.points.length === 1 ? '' : 's' %></em>
+    </article>
+    <article class="kpi">
+      <span>Cash in <%= result.atm.atm_code %></span>
+      <strong><%= inr(result.atm.current_cash) %></strong>
+      <em><%= result.atm.site_name %>, <%= result.atm.location_name %></em>
+    </article>
+    <article class="kpi">
+      <span>Shortfall</span>
+      <strong><%= inr(result.shortfall) %></strong>
+      <em><%= result.covered ? 'Remaining cash covers the forecast.' : 'Forecast exceeds cash still in the machine.' %></em>
+    </article>
+  </section>
+  <section class="section">
+    <h2>The four weeks behind it</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Withdrawal date</th><th>Weekday</th><th class="num">Amount</th><th class="num">Transactions</th></tr></thead>
+        <tbody>
+          <% if (!result.points.length) { %>
+            <tr><td colspan="4" class="empty">No same-weekday history in the prior 28 days. The function returns zero.</td></tr>
+          <% } %>
+          <% result.points.forEach((point) => { %>
+            <tr>
+              <td><%= prettyDate(point.withdrawal_date) %></td>
+              <td><%= result.weekday %></td>
+              <td class="num"><%= inr(point.amount) %></td>
+              <td class="num"><%= point.txn_count %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+<% } %>
