@@ -1,6 +1,7 @@
 const express = require('express');
 const { query } = require('../db');
 const { asyncRoute, renderPage, intOrNull } = require('../http');
+const { lastEightWeeks } = require('../lib/windows');
 
 const router = express.Router();
 const WEEKDAY_KEYS = [
@@ -52,8 +53,7 @@ router.get('/reports/withdrawal-matrix', asyncRoute(async (req, res) => {
        JOIN branches b ON b.branch_id = a.branch_id
        LEFT JOIN daily_withdrawals w
          ON w.atm_id = a.atm_id
-        AND w.withdrawal_date >= CURRENT_DATE - 56
-        AND w.withdrawal_date <= CURRENT_DATE
+        AND ${lastEightWeeks('w.withdrawal_date')}
        WHERE b.location_id = $1
        GROUP BY a.atm_id
        ORDER BY a.atm_code`,

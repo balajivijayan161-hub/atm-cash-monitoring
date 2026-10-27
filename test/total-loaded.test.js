@@ -36,3 +36,17 @@ test('the replenishment form uses that total and rejects a duplicate cassette', 
   });
   assert.ok(duplicate.errors.some((error) => /already listed/i.test(error)));
 });
+
+test('a negative note count does not produce a negative total', () => {
+  assert.equal(lineAmount(2000, -5), 0);
+  assert.equal(totalLoaded([{ denomination: 2000, noteCount: -5 }]), 0);
+  const negative = normalizeLoads({
+    atm_code: 'ATM-MUM-0001',
+    cassette_number: '1',
+    denomination: '2000',
+    note_count: '-5',
+  });
+  assert.ok(negative.errors.some((error) => /note count/i.test(error)));
+  assert.equal(negative.lines[0].amount, 0);
+  assert.equal(negative.total, 0);
+});

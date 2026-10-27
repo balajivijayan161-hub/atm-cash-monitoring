@@ -9,7 +9,7 @@
   function lineAmount(denomination, noteCount) {
     const d = Number(denomination);
     const n = Number(noteCount);
-    if (!Number.isFinite(d) || !Number.isFinite(n)) return 0;
+    if (!Number.isFinite(d) || !Number.isFinite(n) || d < 0 || n < 0) return 0;
     return Math.round(d * n * 100) / 100;
   }
 

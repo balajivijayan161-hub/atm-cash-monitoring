@@ -35,7 +35,7 @@
       <select name="custodian_id" id="custodian_id" required>
         <option value="">Choose</option>
         <% ref.custodians.forEach((person) => { %>
-          <option value="<%= person.custodian_id %>" data-van="<%= person.van_id %>" <%= String(form.custodian_id) === String(person.custodian_id) ? 'selected' : '' %>><%= person.full_name %></option>
+          <option value="<%= person.custodian_id %>" data-van="<%= person.van_id %>" data-location="<%= person.location_id %>" <%= String(form.custodian_id) === String(person.custodian_id) ? 'selected' : '' %>><%= person.full_name %></option>
         <% }) %>
       </select>
     </label>
@@ -53,31 +53,31 @@
   <div class="split">
     <div>
       <div class="table-wrap">
-        <table>
+        <table class="load-table stack-rows">
           <thead>
             <tr><th>ATM code</th><th>Cassette</th><th>Denomination</th><th>Note count</th><th class="num">Amount</th><th></th></tr>
           </thead>
           <tbody id="load-rows">
             <% lines.forEach((line) => { %>
               <tr>
-                <td><input name="atm_code" list="atm-codes" value="<%= line.atmCode %>" placeholder="ATM-MUM-0001" autocomplete="off"></td>
-                <td>
+                <td data-label="ATM code"><input name="atm_code" list="atm-codes" value="<%= line.atmCode %>" placeholder="ATM-MUM-0001" autocomplete="off"></td>
+                <td data-label="Cassette">
                   <select name="cassette_number">
                     <% [1, 2, 3, 4].forEach((n) => { %>
                       <option value="<%= n %>" <%= String(line.cassette) === String(n) ? 'selected' : '' %>><%= n %></option>
                     <% }) %>
                   </select>
                 </td>
-                <td>
+                <td data-label="Denomination">
                   <select name="denomination">
                     <% [100, 200, 500, 2000].forEach((n) => { %>
                       <option value="<%= n %>" <%= String(line.denomination) === String(n) ? 'selected' : '' %>><%= n %></option>
                     <% }) %>
                   </select>
                 </td>
-                <td><input name="note_count" type="number" min="1" max="10000" step="1" value="<%= line.noteCount %>"></td>
-                <td class="line-amount num"><%= inr(line.amount || 0) %></td>
-                <td><button class="btn btn-ghost remove-row" type="button">Remove</button></td>
+                <td data-label="Note count"><input name="note_count" type="number" min="1" max="10000" step="1" value="<%= line.noteCount %>"></td>
+                <td class="line-amount num" data-label="Amount"><%= inr(line.amount || 0) %></td>
+                <td data-label="Row"><button class="btn btn-ghost remove-row" type="button">Remove</button></td>
               </tr>
             <% }) %>
           </tbody>
@@ -107,20 +107,20 @@
 <% } %>
 <template id="load-row-template">
   <tr>
-    <td><input name="atm_code" list="atm-codes" placeholder="ATM-MUM-0001" autocomplete="off"></td>
-    <td>
+    <td data-label="ATM code"><input name="atm_code" list="atm-codes" placeholder="ATM-MUM-0001" autocomplete="off"></td>
+    <td data-label="Cassette">
       <select name="cassette_number">
         <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option>
       </select>
     </td>
-    <td>
+    <td data-label="Denomination">
       <select name="denomination">
         <option value="100">100</option><option value="200">200</option><option value="500">500</option><option value="2000" selected>2000</option>
       </select>
     </td>
-    <td><input name="note_count" type="number" min="1" max="10000" step="1" value=""></td>
-    <td class="line-amount num">—</td>
-    <td><button class="btn btn-ghost remove-row" type="button">Remove</button></td>
+    <td data-label="Note count"><input name="note_count" type="number" min="1" max="10000" step="1" value=""></td>
+    <td class="line-amount num" data-label="Amount">—</td>
+    <td data-label="Row"><button class="btn btn-ghost remove-row" type="button">Remove</button></td>
   </tr>
 </template>
 <script id="ref-data" type="application/json"><%- jsonScript(ref.atms.map((atm) => ({ code: atm.atm_code, locationId: atm.location_id, label: atm.atm_code + ' — ' + atm.site_name }))) %></script>

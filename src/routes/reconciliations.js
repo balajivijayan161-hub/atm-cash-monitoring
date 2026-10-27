@@ -1,13 +1,8 @@
 const express = require('express');
 const { query, withTransaction } = require('../db');
-const { asyncRoute, renderPage, intOrNull, isIsoDate, inr } = require('../http');
+const { asyncRoute, renderPage, intOrNull, isIsoDate, inr, parseLedgerAmount, ledgerAmountError } = require('../http');
 
 const router = express.Router();
-
-function parseMoney(value) {
-  if (typeof value !== 'string' || !/^\d+(\.\d{1,2})?$/.test(value.trim())) return null;
-  return Number(value.trim());
-}
 
 router.get('/reconciliations', asyncRoute(async (req, res) => {
   const rows = await query(
@@ -58,14 +53,20 @@ router.post('/reconciliations', asyncRoute(async (req, res) => {
   const atmId = intOrNull(req.body.atm_id);
   const runId = intOrNull(req.body.run_id);
   const reconDate = typeof req.body.recon_date === 'string' ? req.body.recon_date : '';
-  const expected = parseMoney(req.body.expected_amount || '');
-  const counted = parseMoney(req.body.counted_amount || '');
+  const expected = parseLedgerAmount(req.body.expected_amount || '');
+  const counted = parseLedgerAmount(req.body.counted_amount || '');
   const notes = String(req.body.notes || '').trim().slice(0, 2000);
   const errors = [];
   if (!atmId) errors.push('Choose an ATM.');
   if (!isIsoDate(reconDate)) errors.push('Choose a valid reconciliation date.');
-  if (expected == null) errors.push('Expected amount must be a number with up to 2 decimal places.');
-  if (counted == null) errors.push('Counted amount must be a number with up to 2 decimal places.');
+  else {
+    const today = await query('SELECT CURRENT_DATE::text AS today');
+    if (reconDate > today.rows[0].today) errors.push('Reconciliation date is in the future.');
+  }
+  const expectedError = ledgerAmountError(req.body.expected_amount || '', 'Expected amount');
+  const countedError = ledgerAmountError(req.body.counted_amount || '', 'Counted amount');
+  if (expectedError) errors.push(expectedError);
+  if (countedError) errors.push(countedError);
   if (runId) {
     const run = await query('SELECT run_id FROM replenishment_runs WHERE run_id = $1', [runId]);
     if (!run.rowCount) errors.push('That replenishment run does not exist.');

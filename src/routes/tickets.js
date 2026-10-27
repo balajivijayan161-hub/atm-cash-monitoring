@@ -41,7 +41,15 @@ router.get('/tickets', asyncRoute(async (req, res) => {
 router.post('/tickets/:id/assign', asyncRoute(async (req, res) => {
   const id = intOrNull(req.params.id);
   const engineerId = intOrNull(req.body.engineer_id);
-  if (!id || !engineerId) return res.redirect('/tickets?warning=Choose an engineer before assigning the ticket.');
+  if (!id) return res.redirect('/tickets?warning=Ticket not found.');
+  const engineerText = req.body.engineer_id == null ? '' : String(req.body.engineer_id).trim();
+  if (!engineerText) return res.redirect('/tickets?warning=Choose an engineer before assigning the ticket.');
+  if (!engineerId) return res.redirect('/tickets?warning=Engineer not found.');
+  const ticket = await query('SELECT status FROM fault_tickets WHERE ticket_id = $1', [id]);
+  if (!ticket.rowCount) return res.redirect('/tickets?warning=Ticket not found.');
+  if (ticket.rows[0].status === 'closed') return res.redirect('/tickets?warning=That ticket is already closed.');
+  const engineer = await query('SELECT 1 FROM engineers WHERE engineer_id = $1 AND active', [engineerId]);
+  if (!engineer.rowCount) return res.redirect('/tickets?warning=Engineer not found.');
   const result = await query(
     `UPDATE fault_tickets
      SET engineer_id = $2,
@@ -49,19 +57,19 @@ router.post('/tickets/:id/assign', asyncRoute(async (req, res) => {
          assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP)
      WHERE ticket_id = $1
        AND status <> 'closed'
-       AND EXISTS (SELECT 1 FROM engineers WHERE engineer_id = $2 AND active)
      RETURNING ticket_no`,
     [id, engineerId]
   );
-  if (!result.rowCount) {
-    return res.redirect('/tickets?warning=That ticket could not be assigned. It may already be closed.');
-  }
+  if (!result.rowCount) return res.redirect('/tickets?warning=That ticket is already closed.');
   res.redirect(`/tickets?notice=${encodeURIComponent(result.rows[0].ticket_no + ' assigned.')}`);
 }));
 
 router.post('/tickets/:id/close', asyncRoute(async (req, res) => {
   const id = intOrNull(req.params.id);
-  if (!id) return res.redirect('/tickets?warning=That ticket was not found.');
+  if (!id) return res.redirect('/tickets?warning=Ticket not found.');
+  const ticket = await query('SELECT status FROM fault_tickets WHERE ticket_id = $1', [id]);
+  if (!ticket.rowCount) return res.redirect('/tickets?warning=Ticket not found.');
+  if (ticket.rows[0].status === 'closed') return res.redirect('/tickets?warning=That ticket is already closed.');
   const resolution = String(req.body.resolution || '').trim().slice(0, 2000);
   const result = await query(
     `UPDATE fault_tickets

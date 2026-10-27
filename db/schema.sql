@@ -554,6 +554,18 @@ FROM v_atm_downtime_mtd
 WHERE downtime_pct > 5;
 
 CREATE VIEW v_van_cashout_incidents AS
+WITH servicing AS (
+  SELECT DISTINCT ON (ft.ticket_id)
+    ft.ticket_id,
+    rr.van_id
+  FROM fault_tickets ft
+  JOIN cassette_loads cl ON cl.atm_id = ft.atm_id
+  JOIN replenishment_runs rr ON rr.run_id = cl.run_id
+  WHERE ft.category = 'cash_out'
+    AND rr.status <> 'cancelled'
+    AND rr.planned_date <= (ft.opened_at AT TIME ZONE 'Asia/Kolkata')::date
+  ORDER BY ft.ticket_id, rr.planned_date DESC, rr.run_id DESC
+)
 SELECT
   cv.van_id,
   cv.van_code,
@@ -562,19 +574,18 @@ SELECT
   loc.location_id,
   loc.location_name,
   loc.city,
-  COUNT(DISTINCT ft.ticket_id) AS cashout_incidents,
-  COUNT(DISTINCT cl.atm_id) AS atms_on_route
+  COUNT(DISTINCT servicing.ticket_id) AS cashout_incidents,
+  COUNT(DISTINCT route_loads.atm_id) AS atms_on_route
 FROM cash_vans cv
 JOIN locations loc ON loc.location_id = cv.location_id
-LEFT JOIN replenishment_runs rr ON rr.van_id = cv.van_id AND rr.status <> 'cancelled'
-LEFT JOIN cassette_loads cl ON cl.run_id = rr.run_id
-LEFT JOIN fault_tickets ft
-  ON ft.atm_id = cl.atm_id
- AND ft.category = 'cash_out'
+LEFT JOIN servicing ON servicing.van_id = cv.van_id
+LEFT JOIN replenishment_runs route_runs
+  ON route_runs.van_id = cv.van_id AND route_runs.status <> 'cancelled'
+LEFT JOIN cassette_loads route_loads ON route_loads.run_id = route_runs.run_id
 GROUP BY cv.van_id, loc.location_id;
 
 COMMENT ON VIEW v_atm_downtime_above_5pct IS
   'ATMs whose month-to-date downtime is strictly above 5 percent of elapsed minutes.';
 
 COMMENT ON VIEW v_van_cashout_incidents IS
-  'Cash-out fault tickets on ATMs that appear in each van''s cassette loads.';
+  'Each cash-out ticket counted once, against the van whose latest non-cancelled visit was on or before the day the ticket opened.';

@@ -10,11 +10,32 @@ function isIsoDate(value) {
   return dt.getUTCFullYear() === year && dt.getUTCMonth() === month - 1 && dt.getUTCDate() === day;
 }
 
+const PG_INT_MAX = 2147483647;
+const LEDGER_CENTS_MAX = 99999999999999n;
+
 function intOrNull(value) {
   if (value === undefined || value === null || value === '') return null;
-  const n = Number(value);
-  if (!Number.isInteger(n) || n <= 0) return null;
+  const text = String(value).trim();
+  if (!/^[1-9]\d*$/.test(text)) return null;
+  const n = Number(text);
+  if (!Number.isSafeInteger(n) || n > PG_INT_MAX) return null;
   return n;
+}
+
+function parseLedgerAmount(value) {
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  const match = text.match(/^(\d+)(?:\.(\d{1,2}))?$/);
+  if (!match) return null;
+  const cents = BigInt(match[1]) * 100n + BigInt((match[2] || '').padEnd(2, '0'));
+  if (cents > LEDGER_CENTS_MAX) return null;
+  return text;
+}
+
+function ledgerAmountError(value, label) {
+  if (parseLedgerAmount(value) != null) return null;
+  if (typeof value === 'string' && /^(\d+)(?:\.(\d{1,2}))?$/.test(value.trim())) return 'Amount too large.';
+  return `${label} must be a number with up to 2 decimal places.`;
 }
 
 function likePattern(value) {
@@ -121,6 +142,8 @@ module.exports = {
   asArray,
   isIsoDate,
   intOrNull,
+  parseLedgerAmount,
+  ledgerAmountError,
   likePattern,
   asyncRoute,
   renderPage,

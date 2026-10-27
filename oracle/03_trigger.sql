@@ -91,13 +91,27 @@ SELECT cv.van_id,
        cv.van_code,
        cv.registration_no,
        loc.location_name,
-       COUNT(DISTINCT ft.ticket_id) AS cashout_incidents,
-       COUNT(DISTINCT cl.atm_id) AS atms_on_route
+       (
+         SELECT COUNT(*)
+           FROM fault_tickets ft
+          WHERE ft.category = 'cash_out'
+            AND cv.van_id = (
+              SELECT rr2.van_id
+                FROM replenishment_runs rr2
+                JOIN cassette_loads cl2 ON cl2.run_id = rr2.run_id
+               WHERE cl2.atm_id = ft.atm_id
+                 AND rr2.status <> 'cancelled'
+                 AND rr2.planned_date <= TRUNC(ft.opened_at)
+               ORDER BY rr2.planned_date DESC, rr2.run_id DESC
+               FETCH FIRST 1 ROW ONLY
+            )
+       ) AS cashout_incidents,
+       (
+         SELECT COUNT(DISTINCT cl.atm_id)
+           FROM replenishment_runs rr
+           JOIN cassette_loads cl ON cl.run_id = rr.run_id
+          WHERE rr.van_id = cv.van_id
+            AND rr.status <> 'cancelled'
+       ) AS atms_on_route
   FROM cash_vans cv
-  JOIN locations loc ON loc.location_id = cv.location_id
-  LEFT JOIN replenishment_runs rr ON rr.van_id = cv.van_id AND rr.status <> 'cancelled'
-  LEFT JOIN cassette_loads cl ON cl.run_id = rr.run_id
-  LEFT JOIN fault_tickets ft
-    ON ft.atm_id = cl.atm_id
-   AND ft.category = 'cash_out'
- GROUP BY cv.van_id, cv.van_code, cv.registration_no, loc.location_name;
+  JOIN locations loc ON loc.location_id = cv.location_id;

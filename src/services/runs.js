@@ -1,5 +1,5 @@
 const { normalizeLoads } = require('../lib/loads');
-const { isIsoDate, intOrNull } = require('../http');
+const { isIsoDate, intOrNull, inr } = require('../http');
 
 const RUN_STATUSES = new Set(['planned', 'in_progress', 'completed', 'cancelled']);
 
@@ -58,6 +58,42 @@ async function saveRun(client, body, runId = null) {
     if (!atm) errors.push(`${line.atmCode} is not an ATM on this ledger.`);
     else if (locationId && atm.location_id !== locationId) errors.push(`${line.atmCode} is not in the selected location.`);
     else line.atmId = atm.atm_id;
+  }
+
+  const loadByAtm = new Map();
+  for (const line of normalized.lines) {
+    if (!line.atmId || !line.amount) continue;
+    const next = (loadByAtm.get(line.atmId) || 0) + line.amount;
+    loadByAtm.set(line.atmId, Math.round(next * 100) / 100);
+  }
+  if (loadByAtm.size) {
+    const atmIds = [...loadByAtm.keys()];
+    const caps = await client.query(
+      'SELECT atm_id, atm_code, capacity_amount FROM atms WHERE atm_id = ANY($1::int[])',
+      [atmIds]
+    );
+    for (const atm of caps.rows) {
+      if (loadByAtm.get(atm.atm_id) > Number(atm.capacity_amount)) {
+        errors.push(`${atm.atm_code}: load exceeds ATM capacity (${inr(atm.capacity_amount)}).`);
+      }
+    }
+    if (isIsoDate(plannedDate)) {
+      const dupes = await client.query(
+        `SELECT DISTINCT a.atm_code, rr.run_id
+         FROM cassette_loads cl
+         JOIN replenishment_runs rr ON rr.run_id = cl.run_id
+         JOIN atms a ON a.atm_id = cl.atm_id
+         WHERE cl.atm_id = ANY($1::int[])
+           AND rr.planned_date = $2::date
+           AND rr.status <> 'cancelled'
+           AND ($3::int IS NULL OR rr.run_id <> $3)
+         ORDER BY a.atm_code, rr.run_id`,
+        [atmIds, plannedDate, runId]
+      );
+      for (const row of dupes.rows) {
+        errors.push(`${row.atm_code} is already on run ${row.run_id} for ${plannedDate}.`);
+      }
+    }
   }
 
   const form = {

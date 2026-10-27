@@ -65,15 +65,24 @@ router.get('/runs', asyncRoute(async (req, res) => {
 
 router.post('/runs/plan', asyncRoute(async (req, res) => {
   const plannedDate = req.body.planned_date;
-  const locationId = intOrNull(req.body.location_id);
+  const rawLocation = req.body.location_id;
+  const locationId = intOrNull(rawLocation);
   if (!isIsoDate(plannedDate)) {
     return res.redirect('/runs?warning=Choose a valid date before planning routes.');
+  }
+  const locationText = rawLocation == null ? '' : String(rawLocation).trim();
+  if (locationText && !locationId) {
+    return res.redirect('/runs?warning=Choose a valid location.');
+  }
+  if (locationId) {
+    const location = await query('SELECT 1 FROM locations WHERE location_id = $1', [locationId]);
+    if (!location.rowCount) return res.redirect('/runs?warning=Choose a valid location.');
   }
   try {
     await query('CALL plan_replenishment_routes($1::date, $2::int, 0, 0)', [plannedDate, locationId]);
   } catch (err) {
     console.error(err);
-    return res.redirect(`/runs?warning=${encodeURIComponent('The planner could not finish. ' + err.message)}`);
+    return res.redirect('/runs?warning=The planner could not finish.');
   }
   const log = await query(
     `SELECT runs_created, atms_assigned
@@ -207,7 +216,8 @@ router.post('/runs/:id', asyncRoute(async (req, res) => {
 router.post('/runs/:id/delete', asyncRoute(async (req, res) => {
   const id = intOrNull(req.params.id);
   if (!id) return res.redirect('/runs?warning=That run was not found.');
-  await query('DELETE FROM replenishment_runs WHERE run_id = $1', [id]);
+  const deleted = await query('DELETE FROM replenishment_runs WHERE run_id = $1', [id]);
+  if (!deleted.rowCount) return res.redirect('/runs?warning=That run was not found.');
   res.redirect('/runs?notice=Replenishment run deleted.');
 }));
 

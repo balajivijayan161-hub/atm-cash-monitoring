@@ -3,7 +3,13 @@
   if (!form || !window.CashMath) return;
 
   const dataEl = document.getElementById('ref-data');
-  const data = dataEl ? JSON.parse(dataEl.textContent) : { atms: [] };
+  let raw = [];
+  try {
+    raw = dataEl ? JSON.parse(dataEl.textContent) : [];
+  } catch (err) {
+    raw = [];
+  }
+  const atms = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.atms) ? raw.atms : []);
   const tbody = document.getElementById('load-rows');
   const template = document.getElementById('load-row-template');
   const totalEl = document.getElementById('total-loaded');
@@ -22,6 +28,38 @@
     return money.format(Number(value) || 0);
   }
 
+  function snapshot(select) {
+    if (!select) return [];
+    return [...select.options].filter((opt) => opt.value).map((opt) => ({
+      value: opt.value,
+      label: opt.textContent,
+      location: opt.getAttribute('data-location') || '',
+      van: opt.getAttribute('data-van') || '',
+    }));
+  }
+
+  const vans = snapshot(vanSel);
+  const custodians = snapshot(custodianSel);
+
+  function refill(select, rows, selected) {
+    if (!select) return;
+    const keep = rows.some((row) => row.value === selected) ? selected : '';
+    select.replaceChildren();
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Choose';
+    select.appendChild(placeholder);
+    rows.forEach((row) => {
+      const opt = document.createElement('option');
+      opt.value = row.value;
+      opt.textContent = row.label;
+      if (row.location) opt.setAttribute('data-location', row.location);
+      if (row.van) opt.setAttribute('data-van', row.van);
+      select.appendChild(opt);
+    });
+    select.value = keep;
+  }
+
   function recalc() {
     const lines = [...tbody.querySelectorAll('tr')].map((row) => ({
       denomination: row.querySelector('[name="denomination"]').value,
@@ -37,25 +75,20 @@
     });
   }
 
-  function filterOptions(select, attr, value) {
-    [...select.options].forEach((opt) => {
-      if (!opt.value) return;
-      const show = !value || opt.getAttribute(attr) === String(value);
-      opt.hidden = !show;
-      opt.disabled = !show;
-    });
-    const selected = select.selectedOptions[0];
-    if (selected && selected.disabled) select.value = '';
-  }
-
   function applyFilters() {
-    const locationId = locationSel.value;
-    filterOptions(vanSel, 'data-location', locationId);
-    filterOptions(custodianSel, 'data-van', vanSel.value);
+    const locationId = locationSel ? locationSel.value : '';
+    const vanRows = vans.filter((van) => !locationId || van.location === String(locationId));
+    refill(vanSel, vanRows, vanSel ? vanSel.value : '');
+    const vanId = vanSel ? vanSel.value : '';
+    const custodianRows = custodians.filter((person) => {
+      if (vanId) return person.van === String(vanId);
+      return !locationId || person.location === String(locationId);
+    });
+    refill(custodianSel, custodianRows, custodianSel ? custodianSel.value : '');
     if (!list) return;
     list.replaceChildren();
-    data.atms
-      .filter((atm) => !locationId || String(atm.locationId) === String(locationId))
+    atms
+      .filter((atm) => atm && (!locationId || String(atm.locationId) === String(locationId)))
       .forEach((atm) => {
         const opt = document.createElement('option');
         opt.value = atm.code;
@@ -84,8 +117,8 @@
 
   tbody.addEventListener('input', recalc);
   tbody.addEventListener('change', recalc);
-  locationSel.addEventListener('change', applyFilters);
-  vanSel.addEventListener('change', applyFilters);
+  if (locationSel) locationSel.addEventListener('change', applyFilters);
+  if (vanSel) vanSel.addEventListener('change', applyFilters);
   form.addEventListener('submit', () => {
     const button = form.querySelector('[type="submit"]');
     if (button) button.disabled = true;

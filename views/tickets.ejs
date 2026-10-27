@@ -25,7 +25,7 @@
   <button class="btn" type="submit">Filter</button>
 </form>
 <div class="table-wrap">
-  <table>
+  <table class="ticket-table stack-rows">
     <thead>
       <tr><th>Ticket</th><th>ATM</th><th>Category</th><th>Priority</th><th>Status</th><th>Engineer</th><th>Assign</th><th>Close</th></tr>
     </thead>
@@ -33,17 +33,17 @@
       <% if (!rows.length) { %><tr><td colspan="8" class="empty">No tickets match.</td></tr><% } %>
       <% rows.forEach((row) => { %>
         <tr>
-          <td>
+          <td data-label="Ticket">
             <%= row.ticket_no %><br>
             <span class="hint"><%= row.title %></span><br>
             <span class="pill <%= row.source %>"><%= row.source %></span>
           </td>
-          <td><a href="/atms/<%= row.atm_id %>"><%= row.atm_code %></a><br><span class="hint"><%= row.location_name %></span></td>
-          <td><%= label(row.category) %></td>
-          <td><span class="pill <%= row.priority %>"><%= row.priority %></span></td>
-          <td><span class="pill <%= row.status %>"><%= row.status %></span></td>
-          <td><%= row.engineer_name || '—' %></td>
-          <td>
+          <td data-label="ATM"><a href="/atms/<%= row.atm_id %>"><%= row.atm_code %></a><br><span class="hint"><%= row.location_name %></span></td>
+          <td data-label="Category"><%= label(row.category) %></td>
+          <td data-label="Priority"><span class="pill <%= row.priority %>"><%= row.priority %></span></td>
+          <td data-label="Status"><span class="pill <%= row.status %>"><%= row.status %></span></td>
+          <td data-label="Engineer"><%= row.engineer_name || '—' %></td>
+          <td data-label="Assign">
             <% if (row.status !== 'closed') { %>
               <form method="post" action="/tickets/<%= row.ticket_id %>/assign">
                 <select name="engineer_id" aria-label="Engineer for <%= row.ticket_no %>">
@@ -56,7 +56,7 @@
               </form>
             <% } else { %>—<% } %>
           </td>
-          <td>
+          <td data-label="Close">
             <% if (row.status !== 'closed') { %>
               <form method="post" action="/tickets/<%= row.ticket_id %>/close">
                 <input name="resolution" placeholder="Resolution" aria-label="Resolution for <%= row.ticket_no %>">

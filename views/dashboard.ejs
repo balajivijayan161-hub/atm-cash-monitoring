@@ -42,18 +42,18 @@
 <section class="chart-grid">
   <article class="card">
     <h3>Uptime by location</h3>
-    <canvas id="uptime-chart" height="140"></canvas>
+    <div class="chart-box"><canvas id="uptime-chart"></canvas></div>
   </article>
   <article class="card">
     <h3>Downtime minutes, last 14 days</h3>
-    <canvas id="day-chart" height="140"></canvas>
+    <div class="chart-box"><canvas id="day-chart"></canvas></div>
   </article>
 </section>
 
 <section class="section card">
   <h3>Withdrawals by weekday, last 8 weeks</h3>
   <p class="hint">Friday and Saturday should stand above the midweek columns. That spike is what empties cassettes before Monday.</p>
-  <canvas id="weekday-chart" height="90"></canvas>
+  <div class="chart-box compact"><canvas id="weekday-chart"></canvas></div>
 </section>
 
 <section class="section two-col">
@@ -126,20 +126,29 @@
     const brass = '#8d6a3a';
     const ink = '#1b2421';
     const clay = '#8d2f2f';
+    const sized = { responsive: true, maintainAspectRatio: false };
     new Chart(document.getElementById('uptime-chart'), {
       type: 'bar',
       data: { labels: charts.locations, datasets: [{ label: 'Uptime %', data: charts.uptime, backgroundColor: ink, borderRadius: 4 }] },
-      options: { plugins: { legend: { display: false } }, scales: { y: { min: 80, max: 100 } } }
+      options: { ...sized, plugins: { legend: { display: false } }, scales: { y: { min: 80, max: 100 } } }
     });
     new Chart(document.getElementById('day-chart'), {
       type: 'line',
       data: { labels: charts.days, datasets: [{ label: 'Minutes', data: charts.downtimeMinutes, borderColor: clay, backgroundColor: 'rgba(141,47,47,0.12)', fill: true, tension: 0.25 }] },
-      options: { plugins: { legend: { display: false } } }
+      options: { ...sized, plugins: { legend: { display: false } } }
     });
     new Chart(document.getElementById('weekday-chart'), {
       type: 'bar',
       data: { labels: charts.weekdays, datasets: [{ label: 'Dispensed', data: charts.weekdayAmounts, backgroundColor: charts.weekdays.map((day) => (day === 'Fri' || day === 'Sat' || day === 'Sun') ? brass : '#cfc3ae'), borderRadius: 4 }] },
-      options: { plugins: { legend: { display: false } } }
+      options: { ...sized, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
     });
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => {
+        ['uptime-chart', 'day-chart', 'weekday-chart'].forEach((id) => {
+          const chart = Chart.getChart(id);
+          if (chart) chart.resize();
+        });
+      });
+    }
   }
 </script>

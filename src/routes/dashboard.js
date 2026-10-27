@@ -1,6 +1,7 @@
 const express = require('express');
 const { query } = require('../db');
 const { asyncRoute, renderPage } = require('../http');
+const { lastEightWeeks } = require('../lib/windows');
 
 const router = express.Router();
 
@@ -48,7 +49,7 @@ router.get('/', asyncRoute(async (req, res) => {
            ORDER BY gs`),
     query(`SELECT EXTRACT(DOW FROM withdrawal_date)::int AS dow, COALESCE(SUM(amount), 0) AS amount
            FROM daily_withdrawals
-           WHERE withdrawal_date >= CURRENT_DATE - 56
+           WHERE ${lastEightWeeks('withdrawal_date')}
            GROUP BY 1`),
     query(`SELECT atm_id, atm_code, site_name, location_name, city, downtime_pct, status
            FROM v_atm_downtime_mtd
