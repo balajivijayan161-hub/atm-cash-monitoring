@@ -91,7 +91,7 @@
           <% } %>
           <% recentTickets.forEach((row) => { %>
             <tr>
-              <td><a href="/tickets"><%= row.ticket_no %></a><br><span class="hint"><%= row.title %></span></td>
+              <td><a href="/tickets?ticket=<%= row.ticket_id %>#ticket-<%= row.ticket_id %>"><%= row.ticket_no %></a><br><span class="hint"><%= row.title %></span></td>
               <td><%= row.atm_code %></td>
               <td><span class="pill <%= row.status %>"><%= row.status %></span></td>
             </tr>
@@ -110,7 +110,7 @@
     <a href="/runs/new"><strong>Cassette loads</strong><span>Master run with detail rows. Total loaded recalculates as note counts change.</span></a>
     <a href="/reconciliations/new"><strong>Reconciliation trigger</strong><span>A non-zero expected-versus-counted difference raises a fault ticket in the database.</span></a>
     <a href="/reports/downtime-atms"><strong>Downtime above 5%</strong><span>ATMs whose month-to-date outage exceeds 5% of elapsed minutes.</span></a>
-    <a href="/reports/van-cashouts"><strong>Van cash-outs</strong><span>Cash vans ranked by cash-out tickets on the ATMs they actually load.</span></a>
+    <a href="/reports/van-cashouts"><strong>Van cash-outs</strong><span>Each cash-out ticket counted once, against the van that last serviced the ATM on or before that day.</span></a>
     <a href="/reports/withdrawal-matrix"><strong>ATM × weekday</strong><span>Withdrawal totals for the last eight weeks, one location at a time.</span></a>
     <a href="/reports/downtime-by-location"><strong>Downtime by location</strong><span>Outage minutes and uptime rolled up to each city.</span></a>
     <a href="/switch"><strong>Switch file load</strong><span>Validate, stage, and post a CSV or fixed-width file into daily withdrawals.</span></a>

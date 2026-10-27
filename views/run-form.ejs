@@ -26,7 +26,7 @@
     <label class="field">Cash van
       <select name="van_id" id="van_id" required>
         <option value="">Choose</option>
-        <% ref.vans.forEach((van) => { %>
+        <% ref.vans.forEach((van) => { if (van.status === 'maintenance') return; %>
           <option value="<%= van.van_id %>" data-location="<%= van.location_id %>" <%= String(form.van_id) === String(van.van_id) ? 'selected' : '' %>><%= van.van_code %> · <%= label(van.status) %></option>
         <% }) %>
       </select>

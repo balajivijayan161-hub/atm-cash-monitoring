@@ -51,6 +51,7 @@ router.get('/reconciliations/new', asyncRoute(async (req, res) => {
 
 router.post('/reconciliations', asyncRoute(async (req, res) => {
   const atmId = intOrNull(req.body.atm_id);
+  const runText = req.body.run_id == null ? '' : String(req.body.run_id).trim();
   const runId = intOrNull(req.body.run_id);
   const reconDate = typeof req.body.recon_date === 'string' ? req.body.recon_date : '';
   const expected = parseLedgerAmount(req.body.expected_amount || '');
@@ -67,7 +68,8 @@ router.post('/reconciliations', asyncRoute(async (req, res) => {
   const countedError = ledgerAmountError(req.body.counted_amount || '', 'Counted amount');
   if (expectedError) errors.push(expectedError);
   if (countedError) errors.push(countedError);
-  if (runId) {
+  if (runText && !runId) errors.push('That replenishment run does not exist.');
+  else if (runId) {
     const run = await query('SELECT run_id FROM replenishment_runs WHERE run_id = $1', [runId]);
     if (!run.rowCount) errors.push('That replenishment run does not exist.');
   }

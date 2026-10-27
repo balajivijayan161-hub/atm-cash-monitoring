@@ -32,7 +32,7 @@
     <tbody>
       <% if (!rows.length) { %><tr><td colspan="8" class="empty">No tickets match.</td></tr><% } %>
       <% rows.forEach((row) => { %>
-        <tr>
+        <tr id="ticket-<%= row.ticket_id %>" class="<%= Number(focusId) === Number(row.ticket_id) ? 'row-focus' : '' %>">
           <td data-label="Ticket">
             <%= row.ticket_no %><br>
             <span class="hint"><%= row.title %></span><br>

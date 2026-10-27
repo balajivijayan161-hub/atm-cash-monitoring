@@ -57,21 +57,35 @@ test('ledger amounts stay inside numeric(14,2)', () => {
   assert.match(ledgerAmountError('-5', 'Expected amount'), /up to 2 decimal places/);
 });
 
-test('the last eight weeks are exactly 56 days including today', async () => {
+test('the last eight weeks are 56 days ending yesterday, eight of each weekday', async () => {
   const pred = lastEightWeeks('day');
   const result = await pool.query(
     `SELECT
        COUNT(*) FILTER (WHERE ${pred})::int AS included,
        BOOL_OR(day = CURRENT_DATE) FILTER (WHERE ${pred}) AS includes_today,
-       BOOL_OR(day = CURRENT_DATE - 55) FILTER (WHERE ${pred}) AS includes_start,
-       BOOL_OR(day = CURRENT_DATE - 56) FILTER (WHERE ${pred}) AS includes_extra
-     FROM generate_series(CURRENT_DATE - 80, CURRENT_DATE + 2, interval '1 day') AS gs(day)`
+       BOOL_OR(day = CURRENT_DATE - 1) FILTER (WHERE ${pred}) AS includes_yesterday,
+       BOOL_OR(day = CURRENT_DATE - 56) FILTER (WHERE ${pred}) AS includes_start,
+       BOOL_OR(day = CURRENT_DATE - 57) FILTER (WHERE ${pred}) AS includes_extra,
+       COUNT(DISTINCT EXTRACT(DOW FROM day)) FILTER (WHERE ${pred})::int AS weekdays,
+       MIN(cnt) AS shortest,
+       MAX(cnt) AS longest
+     FROM generate_series(CURRENT_DATE - 80, CURRENT_DATE + 2, interval '1 day') AS gs(day)
+     CROSS JOIN LATERAL (
+       SELECT COUNT(*)::int AS cnt
+       FROM generate_series(CURRENT_DATE - 80, CURRENT_DATE + 2, interval '1 day') AS inner_day
+       WHERE ${lastEightWeeks('inner_day')}
+         AND EXTRACT(DOW FROM inner_day) = EXTRACT(DOW FROM day)
+     ) AS per_dow`
   );
   const row = result.rows[0];
   assert.equal(row.included, 56);
-  assert.equal(row.includes_today, true);
+  assert.equal(row.includes_today, false);
+  assert.equal(row.includes_yesterday, true);
   assert.equal(row.includes_start, true);
   assert.equal(row.includes_extra, false);
+  assert.equal(row.weekdays, 7);
+  assert.equal(row.shortest, 8);
+  assert.equal(row.longest, 8);
 });
 
 async function addVan(client, locationId) {
@@ -200,12 +214,38 @@ test('a run rejects an ATM already loaded that day and a load over capacity', as
     const edited = await saveRun(client, body, first.runId);
     assert.equal(edited.runId, first.runId);
 
-    const over = await saveRun(client, { ...body, planned_date: '2026-11-04', note_count: '30' }, null);
-    assert.ok(over.errors.some((error) => error.includes(`${atm.atmCode}: load exceeds ATM capacity`)));
-    assert.ok(over.errors.some((error) => error.includes('₹50,000')));
+    const withinRoom = await saveRun(client, { ...body, planned_date: '2026-11-04', note_count: '24' }, null);
+    assert.equal(withinRoom.errors, undefined);
+    assert.ok(withinRoom.runId);
 
-    await client.query(`UPDATE replenishment_runs SET status = 'cancelled' WHERE run_id = $1`, [first.runId]);
+    const overRoom = await saveRun(client, { ...body, planned_date: '2026-11-05', note_count: '25' }, null);
+    assert.ok(overRoom.errors.some((error) => error.includes(`${atm.atmCode}: load exceeds remaining ATM capacity`)));
+    assert.ok(overRoom.errors.some((error) => error.includes('₹49,000 still available of ₹50,000')));
+
+    const cancelled = await saveRun(client, {
+      ...body,
+      van_id: String(other.vanId),
+      custodian_id: String(other.custodianId),
+      status: 'cancelled',
+    }, null);
+    assert.equal(cancelled.errors, undefined);
+    assert.ok(cancelled.runId);
+
+    const cancelExisting = await saveRun(client, { ...body, status: 'cancelled' }, first.runId);
+    assert.equal(cancelExisting.runId, first.runId);
+
+    await client.query(`UPDATE cash_vans SET status = 'maintenance' WHERE van_id = $1`, [other.vanId]);
+    const maintenance = await saveRun(client, {
+      ...body,
+      planned_date: '2026-11-06',
+      van_id: String(other.vanId),
+      custodian_id: String(other.custodianId),
+      status: 'planned',
+    }, null);
+    assert.ok(maintenance.errors.some((error) => /in maintenance/i.test(error)));
+
     const afterCancel = await saveRun(client, body, null);
+    assert.equal(afterCancel.errors, undefined);
     assert.ok(afterCancel.runId);
   });
 });
@@ -295,4 +335,39 @@ test('oversized ids, money, dates, and missing rows are validation errors', asyn
   assert.equal(hugeVan.status, 400);
   assert.match(hugeVan.text, /Choose a location/);
   assert.doesNotMatch(hugeVan.text, /database may still be loading/);
+
+  const beforeRecon = await pool.query('SELECT COUNT(*)::int AS n FROM reconciliations');
+  for (const runId of ['99999999999', 'abc']) {
+    const badRun = await post('/reconciliations', {
+      atm_id: atmId,
+      run_id: runId,
+      recon_date: today.rows[0].today,
+      expected_amount: '100',
+      counted_amount: '100',
+      notes: `bad-run-${runId}`,
+    });
+    assert.equal(badRun.status, 400);
+    assert.match(badRun.text, /That replenishment run does not exist/);
+  }
+  const afterRecon = await pool.query('SELECT COUNT(*)::int AS n FROM reconciliations');
+  assert.equal(afterRecon.rows[0].n, beforeRecon.rows[0].n);
+
+  const maint = await pool.query(`SELECT van_code FROM cash_vans WHERE status = 'maintenance' LIMIT 1`);
+  assert.ok(maint.rowCount > 0);
+  const runForm = await fetch(`${base}/runs/new`);
+  const runHtml = await runForm.text();
+  assert.equal(runForm.status, 200);
+  assert.doesNotMatch(runHtml, new RegExp(maint.rows[0].van_code));
+
+  const cashouts = await fetch(`${base}/reports/van-cashouts`);
+  const cashoutHtml = await cashouts.text();
+  assert.match(cashoutHtml, /counted once, against the van that last serviced/);
+
+  const home = await fetch(`${base}/`);
+  const homeHtml = await home.text();
+  const ticketLink = homeHtml.match(/href="\/tickets\?ticket=(\d+)#ticket-\1"/);
+  assert.ok(ticketLink);
+  const focused = await fetch(`${base}/tickets?ticket=${ticketLink[1]}`);
+  const focusedHtml = await focused.text();
+  assert.match(focusedHtml, new RegExp(`id="ticket-${ticketLink[1]}" class="row-focus"`));
 });

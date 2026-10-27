@@ -9,6 +9,7 @@ const CATEGORIES = ['cash_variance', 'cash_out', 'hardware', 'communication', 'c
 router.get('/tickets', asyncRoute(async (req, res) => {
   const status = STATUSES.includes(req.query.status) ? req.query.status : '';
   const category = CATEGORIES.includes(req.query.category) ? req.query.category : '';
+  const focusId = intOrNull(req.query.ticket);
   const [rows, engineers] = await Promise.all([
     query(
       `SELECT ft.ticket_id, ft.ticket_no, ft.title, ft.category, ft.priority, ft.status, ft.source,
@@ -21,10 +22,11 @@ router.get('/tickets', asyncRoute(async (req, res) => {
        LEFT JOIN engineers e ON e.engineer_id = ft.engineer_id
        WHERE ($1::text IS NULL OR ft.status = $1)
          AND ($2::text IS NULL OR ft.category = $2)
-       ORDER BY CASE ft.status WHEN 'open' THEN 0 WHEN 'assigned' THEN 1 ELSE 2 END,
+       ORDER BY (ft.ticket_id = $3::int) DESC,
+                CASE ft.status WHEN 'open' THEN 0 WHEN 'assigned' THEN 1 ELSE 2 END,
                 ft.opened_at DESC
        LIMIT 80`,
-      [status || null, category || null]
+      [status || null, category || null, focusId]
     ),
     query(`SELECT engineer_id, full_name, specialty FROM engineers WHERE active ORDER BY full_name`),
   ]);
@@ -33,6 +35,7 @@ router.get('/tickets', asyncRoute(async (req, res) => {
     rows: rows.rows,
     engineers: engineers.rows,
     filters: { status, category },
+    focusId,
     statuses: STATUSES,
     categories: CATEGORIES,
   });

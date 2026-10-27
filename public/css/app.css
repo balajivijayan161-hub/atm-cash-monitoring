@@ -232,11 +232,28 @@ pre.script {
 }
 .bad-num { color: var(--bad); font-weight: 600; }
 .row-error td { background: #fdf6f4; }
+.row-focus td { background: #f8efd8; }
 
 @media (max-width: 980px) {
   .shell { grid-template-columns: minmax(0, 1fr); }
-  .sidebar { position: sticky; height: auto; z-index: 2; min-width: 0; }
-  .nav { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; max-width: 100%; }
+  .sidebar {
+    position: static;
+    top: auto;
+    height: auto;
+    z-index: auto;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    min-width: 0;
+    padding: 8px 10px;
+  }
+  .brand { flex: 0 0 auto; padding: 0; }
+  .brand span { display: none; }
+  .nav { display: flex; flex: 0 0 auto; flex-wrap: nowrap; gap: 2px; min-width: 0; max-width: none; overflow: visible; }
   .nav a { white-space: nowrap; flex: 0 0 auto; }
   .nav-label { display: none; }
   .kpi-grid, .link-grid, .chart-grid, .form-grid, .meta, .two-col, .split { grid-template-columns: 1fr 1fr; }

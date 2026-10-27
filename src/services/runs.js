@@ -23,10 +23,11 @@ async function saveRun(client, body, runId = null) {
 
   if (vanId && locationId) {
     const vanRes = await client.query(
-      'SELECT van_id, location_id FROM cash_vans WHERE van_id = $1',
+      'SELECT van_id, location_id, status FROM cash_vans WHERE van_id = $1',
       [vanId]
     );
     if (!vanRes.rowCount) errors.push('That cash van is not on the ledger.');
+    else if (vanRes.rows[0].status === 'maintenance') errors.push('That cash van is in maintenance.');
     else if (vanRes.rows[0].location_id !== locationId) errors.push('The van is based in a different location.');
   }
 
@@ -69,15 +70,17 @@ async function saveRun(client, body, runId = null) {
   if (loadByAtm.size) {
     const atmIds = [...loadByAtm.keys()];
     const caps = await client.query(
-      'SELECT atm_id, atm_code, capacity_amount FROM atms WHERE atm_id = ANY($1::int[])',
+      'SELECT atm_id, atm_code, capacity_amount, current_cash FROM atms WHERE atm_id = ANY($1::int[])',
       [atmIds]
     );
     for (const atm of caps.rows) {
-      if (loadByAtm.get(atm.atm_id) > Number(atm.capacity_amount)) {
-        errors.push(`${atm.atm_code}: load exceeds ATM capacity (${inr(atm.capacity_amount)}).`);
+      const capacity = Number(atm.capacity_amount);
+      const room = Math.round((capacity - Number(atm.current_cash)) * 100) / 100;
+      if (loadByAtm.get(atm.atm_id) > room) {
+        errors.push(`${atm.atm_code}: load exceeds remaining ATM capacity (${inr(room)} still available of ${inr(capacity)}).`);
       }
     }
-    if (isIsoDate(plannedDate)) {
+    if (isIsoDate(plannedDate) && status !== 'cancelled') {
       const dupes = await client.query(
         `SELECT DISTINCT a.atm_code, rr.run_id
          FROM cassette_loads cl
