@@ -11,6 +11,7 @@ const LOCK_MS = 15 * 60 * 1000;
 const MAX_FAILS = 5;
 
 function loginPage(res, data) {
+  res.setHeader('Cache-Control', 'no-store');
   res.status(data.statusCode || 200).render('login', {
     error: '',
     reason: '',
@@ -46,6 +47,7 @@ async function logSetup(req, outcome, userId) {
 router.get('/setup', async (req, res, next) => {
   try {
     if (!(await setupOpen())) return setupDisabled(res);
+    res.setHeader('Cache-Control', 'no-store');
     return res.render('setup', { error: '' });
   } catch (err) {
     return next(err);
@@ -62,12 +64,14 @@ router.post('/setup', async (req, res, next) => {
     const token = formText(req.body, 'setup_token');
     if (!secretMatch(envSecret('SETUP_TOKEN'), token)) {
       await logSetup(req, 'rejected', userId);
+      res.setHeader('Cache-Control', 'no-store');
       return res.status(401).render('setup', { error: 'The setup token does not match.' });
     }
     const password = formText(req.body, 'new-password', 'password');
     const confirm = formText(req.body, 'confirm-password', 'password_confirm');
     if (password.length < 12 || password !== confirm) {
       await logSetup(req, 'rejected', userId);
+      res.setHeader('Cache-Control', 'no-store');
       return res.status(400).render('setup', {
         error: password.length < 12 ? 'Use at least 12 characters.' : 'The passwords do not match.',
       });
