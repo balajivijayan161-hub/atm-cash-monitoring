@@ -623,5 +623,16 @@ CREATE TABLE IF NOT EXISTS atm_link_status (
   atm_id INTEGER PRIMARY KEY REFERENCES atms (atm_id) ON DELETE CASCADE,
   online BOOLEAN NOT NULL DEFAULT TRUE,
   offline_since TIMESTAMPTZ,
+  state_as_of DATE,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE atm_link_status ADD COLUMN IF NOT EXISTS state_as_of DATE;
+ALTER TABLE downtime_log ADD COLUMN IF NOT EXISTS origin VARCHAR(16);
+
+INSERT INTO atm_link_status (atm_id, online, state_as_of)
+SELECT a.atm_id, TRUE, CURRENT_DATE
+FROM atms a
+WHERE NOT EXISTS (SELECT 1 FROM atm_link_status s WHERE s.atm_id = a.atm_id);
+
+UPDATE atm_link_status SET state_as_of = CURRENT_DATE WHERE state_as_of IS NULL;

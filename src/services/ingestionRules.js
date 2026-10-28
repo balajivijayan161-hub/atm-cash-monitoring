@@ -19,15 +19,60 @@ function ruleOptions(overrides = {}) {
   };
 }
 
+function rowUpdatesCurrentState(txnDate, stateAsOf, today) {
+  if (!txnDate) return false;
+  if (!stateAsOf) return txnDate >= today;
+  return txnDate >= stateAsOf;
+}
+
+function downtimeOrigin(batchSource) {
+  return batchSource === 'simulator' ? 'live_feed' : 'switch';
+}
+
 async function applyIngestionRules(client, rows, options = {}) {
   const settings = ruleOptions(options);
+  const todayRes = await client.query('SELECT CURRENT_DATE::text AS today');
+  const today = todayRes.rows[0].today;
   const loaded = rows.filter((row) => row && row.loaded && row.atmId);
-  for (const row of loaded) {
+  const ordered = [...loaded].sort((a, b) => {
+    const byDate = String(a.txnDate || '').localeCompare(String(b.txnDate || ''));
+    if (byDate) return byDate;
+    return (a.lineNo || 0) - (b.lineNo || 0);
+  });
+  const stateAsOf = new Map();
+  const ids = [...new Set(ordered.map((row) => row.atmId))];
+  if (ids.length) {
+    const known = await client.query(
+      'SELECT atm_id, state_as_of::text AS state_as_of FROM atm_link_status WHERE atm_id = ANY($1::int[])',
+      [ids]
+    );
+    for (const row of known.rows) stateAsOf.set(row.atm_id, row.state_as_of);
+  }
+  for (const row of ordered) {
+    const hasState = row.cashLevel != null || (row.faultCode && row.faultCode !== 'offline') || row.online === true || row.online === false;
+    if (!hasState) continue;
+    if (!rowUpdatesCurrentState(row.txnDate, stateAsOf.get(row.atmId) || null, today)) continue;
     if (row.cashLevel != null) await applyCashLevel(client, row, settings);
     if (row.faultCode && row.faultCode !== 'offline') await applyFault(client, row);
     if (row.online === true || row.online === false) await applyLink(client, row, settings);
+    await client.query(
+      `INSERT INTO atm_link_status (atm_id, online, state_as_of)
+       VALUES ($1, TRUE, $2::date)
+       ON CONFLICT (atm_id) DO UPDATE
+         SET state_as_of = EXCLUDED.state_as_of, updated_at = CURRENT_TIMESTAMP`,
+      [row.atmId, row.txnDate]
+    );
+    stateAsOf.set(row.atmId, row.txnDate);
   }
   return settings;
+}
+
+async function closeLiveFeedDowntime(client) {
+  await client.query(
+    `UPDATE downtime_log
+     SET ended_at = CURRENT_TIMESTAMP
+     WHERE ended_at IS NULL AND origin = 'live_feed'`
+  );
 }
 
 async function applyCashLevel(client, row, settings) {
@@ -91,6 +136,7 @@ async function applyLink(client, row, settings) {
     'SELECT online, offline_since FROM atm_link_status WHERE atm_id = $1',
     [row.atmId]
   );
+  const origin = downtimeOrigin(row.batchSource);
   if (row.online) {
     if (state.rowCount) {
       await client.query(
@@ -103,7 +149,7 @@ async function applyLink(client, row, settings) {
     await client.query(
       `UPDATE downtime_log
        SET ended_at = CURRENT_TIMESTAMP
-       WHERE atm_id = $1 AND ended_at IS NULL`,
+       WHERE atm_id = $1 AND ended_at IS NULL AND origin IN ('live_feed', 'switch')`,
       [row.atmId]
     );
     return;
@@ -143,8 +189,10 @@ async function applyLink(client, row, settings) {
 
   const reason = (TICKET_FAULTS[row.faultCode] && TICKET_FAULTS[row.faultCode].downtime) || 'communication';
   const open = await client.query(
-    `SELECT downtime_id FROM downtime_log WHERE atm_id = $1 AND ended_at IS NULL LIMIT 1`,
-    [row.atmId]
+    `SELECT downtime_id FROM downtime_log
+     WHERE atm_id = $1 AND ended_at IS NULL AND origin = $2
+     LIMIT 1`,
+    [row.atmId, origin]
   );
   if (open.rowCount) {
     await client.query(
@@ -156,14 +204,17 @@ async function applyLink(client, row, settings) {
     return;
   }
   await client.query(
-    `INSERT INTO downtime_log (atm_id, started_at, reason, notes)
-     VALUES ($1, $2, $3, $4)`,
-    [row.atmId, offlineSince, reason, `Offline from switch batch ${row.batchId || ''}.`.trim()]
+    `INSERT INTO downtime_log (atm_id, started_at, reason, notes, origin)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [row.atmId, offlineSince, reason, `Offline from switch batch ${row.batchId || ''}.`.trim(), origin]
   );
 }
 
 module.exports = {
   TICKET_FAULTS,
   ruleOptions,
+  rowUpdatesCurrentState,
+  downtimeOrigin,
   applyIngestionRules,
+  closeLiveFeedDowntime,
 };

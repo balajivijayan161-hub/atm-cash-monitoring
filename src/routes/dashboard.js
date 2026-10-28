@@ -7,7 +7,7 @@ const { getSimulatorStatus } = require('../services/simulator');
 const router = express.Router();
 
 router.get('/', asyncRoute(async (req, res) => {
-  const [fleet, tickets, runs, dispensed, byLocation, byDay, byWeekday, worst, recentTickets, alerts, downtimeOpen] = await Promise.all([
+  const [fleet, tickets, runs, dispensed, byLocation, byDay, byWeekday, worst, recentTickets, alerts, alertCount, downtimeOpen, downtimeCount] = await Promise.all([
     query(`SELECT
              COUNT(*)::int AS atms,
              ROUND(AVG(downtime_pct)::numeric, 2) AS avg_downtime_pct,
@@ -68,12 +68,14 @@ router.get('/', asyncRoute(async (req, res) => {
            WHERE r.status = 'open'
            ORDER BY r.created_at DESC
            LIMIT 8`),
+    query(`SELECT COUNT(*)::int AS n FROM replenishment_requests WHERE status = 'open'`),
     query(`SELECT d.downtime_id, d.started_at, d.reason, a.atm_id, a.atm_code
            FROM downtime_log d
            JOIN atms a ON a.atm_id = d.atm_id
            WHERE d.ended_at IS NULL
            ORDER BY d.started_at DESC
            LIMIT 6`),
+    query(`SELECT COUNT(*)::int AS n FROM downtime_log WHERE ended_at IS NULL`),
   ]);
 
   const fleetRow = fleet.rows[0] || {};
@@ -92,7 +94,9 @@ router.get('/', asyncRoute(async (req, res) => {
     worst: worst.rows,
     recentTickets: recentTickets.rows,
     alerts: alerts.rows,
+    alertTotal: alertCount.rows[0].n,
     downtimeOpen: downtimeOpen.rows,
+    downtimeTotal: downtimeCount.rows[0].n,
     simulator: getSimulatorStatus(),
     charts: {
       locations: byLocation.rows.map((row) => row.location_name),

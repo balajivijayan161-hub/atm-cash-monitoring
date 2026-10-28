@@ -1,5 +1,6 @@
-const { withTransaction } = require('../db');
+const { pool, withTransaction } = require('../db');
 const { importSwitchContent } = require('./switchImport');
+const { closeLiveFeedDowntime } = require('./ingestionRules');
 
 const DEFAULT_TICK_MS = 4000;
 const DEFAULT_MAX_MS = 15 * 60 * 1000;
@@ -102,7 +103,7 @@ async function runSimulatorTick(client, options = {}) {
   const content = `${lines.join('\n')}\n`;
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   return importSwitchContent(client, {
-    filename: `simulator-${stamp}.csv`,
+    filename: `switch-feed-${stamp}.csv`,
     content,
     replaceExisting: true,
     source: 'simulator',
@@ -114,7 +115,7 @@ async function tickSimulator() {
   const { maxMs } = limits();
   if (!state.running) return;
   if (shouldAutoStop(state.startedAt, Date.now(), maxMs)) {
-    stopSimulator();
+    await stopSimulator();
     return;
   }
   try {
@@ -139,11 +140,17 @@ function startSimulator() {
   return getSimulatorStatus();
 }
 
-function stopSimulator() {
+async function stopSimulator() {
   if (state.timer) clearInterval(state.timer);
   state.timer = null;
   state.running = false;
   state.stopsAt = null;
+  state.offline.clear();
+  try {
+    await closeLiveFeedDowntime(pool);
+  } catch (err) {
+    console.error('Could not close live-feed downtime', err);
+  }
   return getSimulatorStatus();
 }
 

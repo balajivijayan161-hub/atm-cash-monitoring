@@ -69,3 +69,10 @@
     </tbody>
   </table>
 </div>
+<% if (pages > 1) { %>
+  <nav class="pager" aria-label="Ticket pages">
+    <% if (page > 1) { %><a href="<%= pageHref('/tickets', filters, page - 1) %>">Previous</a><% } %>
+    <span>Page <%= page %> of <%= pages %></span>
+    <% if (page < pages) { %><a href="<%= pageHref('/tickets', filters, page + 1) %>">Next</a><% } %>
+  </nav>
+<% } %>

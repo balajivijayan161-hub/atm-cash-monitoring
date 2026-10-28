@@ -4,17 +4,17 @@ const { getSimulatorStatus, startSimulator, stopSimulator } = require('../servic
 
 const router = express.Router();
 
-router.get('/simulator/status', asyncRoute(async (req, res) => {
+router.get('/live-feed/status', asyncRoute(async (req, res) => {
   res.json(getSimulatorStatus());
 }));
 
-router.post('/simulator/start', asyncRoute(async (req, res) => {
+router.post('/live-feed/start', asyncRoute(async (req, res) => {
   startSimulator();
   res.redirect('/?notice=Live feed started. It stops itself after 15 minutes.');
 }));
 
-router.post('/simulator/stop', asyncRoute(async (req, res) => {
-  stopSimulator();
+router.post('/live-feed/stop', asyncRoute(async (req, res) => {
+  await stopSimulator();
   res.redirect('/?notice=Live feed stopped.');
 }));
 

@@ -4,8 +4,8 @@
     <h1>Fleet uptime</h1>
     <p class="lede">Availability, cash-out pressure, and how weekend withdrawals sit against the cash still in the machines.</p>
   </div>
-  <form method="post" action="<%= simulator.running ? '/simulator/stop' : '/simulator/start' %>">
-    <button class="btn <%= simulator.running ? 'btn-danger' : 'btn-primary' %>" type="submit"><%= simulator.running ? 'Stop live feed' : 'Start live feed' %></button>
+  <form method="post" action="<%= simulator.running ? '/live-feed/stop' : '/live-feed/start' %>">
+    <button class="btn <%= simulator.running ? 'btn-danger' : 'btn-primary' %>" type="submit"><%= simulator.running ? 'Stop live feed' : 'Live feed' %></button>
     <% if (simulator.running) { %><p class="hint">Feed is on and will stop itself after 15 minutes.</p><% } %>
   </form>
 </header>
@@ -28,8 +28,13 @@
       </tbody>
     </table>
   </div>
+  <% if (alertTotal > alerts.length) { %>
+    <p class="hint" style="margin-top:8px"><a href="/alerts">+<%= alertTotal - alerts.length %> more</a></p>
+  <% } %>
   <% if (downtimeOpen.length) { %>
-    <p class="hint" style="margin-top:8px">Open downtime: <% downtimeOpen.forEach((row, index) => { %><% if (index) { %>, <% } %><a href="/atms/<%= row.atm_id %>"><%= row.atm_code %></a> <%= label(row.reason) %><% }) %>.</p>
+    <p class="hint" style="margin-top:8px">Open downtime: <% downtimeOpen.forEach((row, index) => { %><% if (index) { %>, <% } %><a href="/atms/<%= row.atm_id %>"><%= row.atm_code %></a> <%= label(row.reason) %><% }) %><% if (downtimeTotal > downtimeOpen.length) { %> · <a href="/downtime">+<%= downtimeTotal - downtimeOpen.length %> more</a><% } %>.</p>
+  <% } else if (downtimeTotal > 0) { %>
+    <p class="hint" style="margin-top:8px"><a href="/downtime">+<%= downtimeTotal %> more open downtime</a></p>
   <% } %>
 </section>
 
@@ -182,7 +187,7 @@
     let seen = null;
     setInterval(async () => {
       try {
-        const body = await fetch('/simulator/status').then((res) => res.json());
+        const body = await fetch('/live-feed/status').then((res) => res.json());
         if (seen && seen.running && (!body.running || body.ticks !== seen.ticks)) {
           location.reload();
           return;

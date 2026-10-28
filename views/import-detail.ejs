@@ -1,6 +1,6 @@
 <header class="page-head">
   <div>
-    <p class="eyebrow"><%= label(batch.source || 'manual') %> · <%= batch.file_format %></p>
+    <p class="eyebrow"><%= sourceLabel(batch.source) %> · <%= batch.file_format %></p>
     <h1><%= batch.filename %></h1>
     <p class="lede">Received <%= prettyDateTime(batch.uploaded_at) %> IST. <%= batch.loaded_count %> accepted, <%= batch.error_count %> rejected, <%= batch.row_count %> rows in the file.</p>
   </div>

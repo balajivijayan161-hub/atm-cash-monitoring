@@ -1,0 +1,30 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Still down</p>
+    <h1>Open downtime</h1>
+    <p class="lede">Outages that have not been closed.</p>
+  </div>
+</header>
+<div class="table-wrap">
+  <table class="stack-rows">
+    <thead><tr><th>ATM</th><th>Location</th><th>Reason</th><th>Started</th></tr></thead>
+    <tbody>
+      <% if (!rows.length) { %><tr><td colspan="4" class="empty">No open downtime.</td></tr><% } %>
+      <% rows.forEach((row) => { %>
+        <tr>
+          <td data-label="ATM"><a href="/atms/<%= row.atm_id %>"><%= row.atm_code %></a><br><span class="hint"><%= row.site_name %></span></td>
+          <td data-label="Location"><%= row.location_name %></td>
+          <td data-label="Reason"><%= label(row.reason) %></td>
+          <td data-label="Started"><%= prettyDateTime(row.started_at) %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% if (pages > 1) { %>
+  <nav class="pager" aria-label="Downtime pages">
+    <% if (page > 1) { %><a href="<%= pageHref('/downtime', {}, page - 1) %>">Previous</a><% } %>
+    <span>Page <%= page %> of <%= pages %></span>
+    <% if (page < pages) { %><a href="<%= pageHref('/downtime', {}, page + 1) %>">Next</a><% } %>
+  </nav>
+<% } %>

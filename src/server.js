@@ -3,6 +3,7 @@ const { seedIfEmpty } = require('../db/seed');
 const { createApp } = require('./app');
 const { startInboundPoller, stopInboundPoller } = require('./services/inboundPoller');
 const { stopSimulator } = require('./services/simulator');
+const { closeLiveFeedDowntime } = require('./services/ingestionRules');
 
 async function boot() {
   const client = await pool.connect();
@@ -11,6 +12,7 @@ async function boot() {
     await client.query('BEGIN');
     await applySchema(client);
     const seeded = await seedIfEmpty(client);
+    await closeLiveFeedDowntime(client);
     await client.query('COMMIT');
     if (seeded) console.log('Sample ledger committed.');
   } catch (err) {

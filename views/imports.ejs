@@ -6,7 +6,7 @@
   </div>
 </header>
 <div class="table-wrap">
-  <table>
+  <table class="stack-rows">
     <thead>
       <tr><th>Batch</th><th>Source</th><th>File</th><th>Received (IST)</th><th class="num">Accepted</th><th class="num">Rejected</th><th>Status</th></tr>
     </thead>
@@ -14,15 +14,22 @@
       <% if (!rows.length) { %><tr><td colspan="7" class="empty">No switch batches yet.</td></tr><% } %>
       <% rows.forEach((row) => { %>
         <tr>
-          <td><a href="/imports/<%= row.batch_id %>"><%= row.batch_id %></a></td>
-          <td><%= label(row.source || 'manual') %></td>
-          <td><%= row.filename %></td>
-          <td><%= prettyDateTime(row.uploaded_at) %></td>
-          <td class="num"><%= row.loaded_count %></td>
-          <td class="num"><%= row.error_count %></td>
-          <td><span class="pill <%= String(row.status).replace(/_/g, '-') %>"><%= label(row.status) %></span></td>
+          <td data-label="Batch"><a href="/imports/<%= row.batch_id %>"><%= row.batch_id %></a></td>
+          <td data-label="Source"><%= sourceLabel(row.source) %></td>
+          <td data-label="File"><%= row.filename %></td>
+          <td data-label="Received (IST)"><%= prettyDateTime(row.uploaded_at) %></td>
+          <td class="num" data-label="Accepted"><%= row.loaded_count %></td>
+          <td class="num" data-label="Rejected"><%= row.error_count %></td>
+          <td data-label="Status"><span class="pill <%= String(row.status).replace(/_/g, '-') %>"><%= label(row.status) %></span></td>
         </tr>
       <% }) %>
     </tbody>
   </table>
 </div>
+<% if (pages > 1) { %>
+  <nav class="pager" aria-label="Import pages">
+    <% if (page > 1) { %><a href="<%= pageHref('/imports', {}, page - 1) %>">Previous</a><% } %>
+    <span>Page <%= page %> of <%= pages %></span>
+    <% if (page < pages) { %><a href="<%= pageHref('/imports', {}, page + 1) %>">Next</a><% } %>
+  </nav>
+<% } %>

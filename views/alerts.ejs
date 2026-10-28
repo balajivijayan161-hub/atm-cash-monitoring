@@ -1,0 +1,31 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Cash still short</p>
+    <h1>Cash alerts</h1>
+    <p class="lede">ATMs whose latest cash level is below the replenishment threshold.</p>
+  </div>
+</header>
+<div class="table-wrap">
+  <table class="stack-rows">
+    <thead><tr><th>ATM</th><th>Location</th><th class="num">Cash</th><th class="num">Capacity</th><th>Opened</th></tr></thead>
+    <tbody>
+      <% if (!rows.length) { %><tr><td colspan="5" class="empty">No open replenishment alerts.</td></tr><% } %>
+      <% rows.forEach((row) => { %>
+        <tr>
+          <td data-label="ATM"><a href="/atms/<%= row.atm_id %>"><%= row.atm_code %></a><br><span class="hint"><%= row.site_name %></span></td>
+          <td data-label="Location"><%= row.location_name %></td>
+          <td class="num" data-label="Cash"><%= inr(row.current_cash) %></td>
+          <td class="num" data-label="Capacity"><%= inr(row.capacity_amount) %></td>
+          <td data-label="Opened"><%= prettyDateTime(row.created_at) %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% if (pages > 1) { %>
+  <nav class="pager" aria-label="Alert pages">
+    <% if (page > 1) { %><a href="<%= pageHref('/alerts', {}, page - 1) %>">Previous</a><% } %>
+    <span>Page <%= page %> of <%= pages %></span>
+    <% if (page < pages) { %><a href="<%= pageHref('/alerts', {}, page + 1) %>">Next</a><% } %>
+  </nav>
+<% } %>

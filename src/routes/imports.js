@@ -1,19 +1,25 @@
 const express = require('express');
 const { query } = require('../db');
-const { asyncRoute, renderPage, intOrNull } = require('../http');
+const { asyncRoute, renderPage, intOrNull, pageWindow } = require('../http');
 
 const router = express.Router();
+const PAGE_SIZE = 80;
 
 router.get('/imports', asyncRoute(async (req, res) => {
+  const count = await query('SELECT COUNT(*)::int AS total FROM switch_import_batches');
+  const window = pageWindow(parseInt(req.query.page, 10), PAGE_SIZE, count.rows[0].total);
   const rows = await query(
     `SELECT batch_id, filename, source, file_format, uploaded_at, row_count, loaded_count, error_count, status
      FROM switch_import_batches
      ORDER BY uploaded_at DESC, batch_id DESC
-     LIMIT 80`
+     LIMIT $1 OFFSET $2`,
+    [PAGE_SIZE, window.offset]
   );
   renderPage(req, res, 'imports', {
     title: 'Import history',
     rows: rows.rows,
+    page: window.page,
+    pages: window.pages,
   });
 }));
 

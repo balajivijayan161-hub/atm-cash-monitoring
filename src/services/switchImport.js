@@ -171,6 +171,7 @@ async function importSwitchContent(client, {
       ...row,
       loaded: loadedLines.has(row.lineNo),
       batchId,
+      batchSource,
     })), rules || {});
   }
 

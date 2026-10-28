@@ -4,8 +4,10 @@ const path = require('path');
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { createApp } = require('../src/app');
+const { pageWindow } = require('../src/http');
 const { parseSwitchFile } = require('../src/lib/switchFile');
 const { importSwitchContent } = require('../src/services/switchImport');
+const { rowUpdatesCurrentState, closeLiveFeedDowntime } = require('../src/services/ingestionRules');
 const { ingestTracked, scanInboundOnce, classifyIngestResult } = require('../src/services/inboundPoller');
 const { runSimulatorTick, shouldAutoStop } = require('../src/services/simulator');
 const { ensureSchema, withRollback, makeAtm, pool } = require('./helpers');
@@ -61,21 +63,71 @@ test('the live feed stops itself after the cap and not before', () => {
   assert.equal(classifyIngestResult({ ok: true, duplicate: true, loaded: 0 }), 'processed');
   assert.equal(classifyIngestResult({ ok: true, loaded: 0 }), 'rejected');
   assert.equal(classifyIngestResult({ ok: false }), 'rejected');
+  assert.equal(rowUpdatesCurrentState('2024-08-02', null, '2026-10-28'), false);
+  assert.equal(rowUpdatesCurrentState('2026-10-28', null, '2026-10-28'), true);
+  assert.equal(rowUpdatesCurrentState('2024-08-02', '2026-10-28', '2026-10-28'), false);
+  assert.equal(rowUpdatesCurrentState('2026-10-28', '2026-10-28', '2026-10-28'), true);
+  const window = pageWindow(3, 80, 200);
+  assert.equal(window.page, 3);
+  assert.equal(window.pages, 3);
+  assert.equal(window.offset, 160);
+  assert.equal(pageWindow(9, 80, 10).page, 1);
 });
 
 test('ingestion raises one cash alert, one ticket per fault, and downtime only after the offline threshold', async () => {
   await withRollback(async (client) => {
-    const atm = await makeAtm(client, { capacity: 100000, cash: 80000 });
+    const atm = await makeAtm(client, { capacity: 300000, cash: 80000 });
+    const today = (await client.query('SELECT CURRENT_DATE::text AS today')).rows[0].today;
+    const pastOnly = await importSwitchContent(client, {
+      filename: 'past.csv',
+      content: feedCsv(atm, { cash: 250000, date: '2024-08-02', fault: 'hardware' }),
+      replaceExisting: false,
+      rules: { cashThresholdPct: 20, offlineMinutes: 0 },
+    });
+    assert.equal(pastOnly.loaded, 1);
+    const afterPast = await client.query('SELECT current_cash FROM atms WHERE atm_id = $1', [atm.atmId]);
+    assert.equal(Number(afterPast.rows[0].current_cash), 80000);
+    const pastAlerts = await client.query(
+      `SELECT COUNT(*)::int AS n FROM replenishment_requests WHERE atm_id = $1`,
+      [atm.atmId]
+    );
+    assert.equal(pastAlerts.rows[0].n, 0);
+    const pastTickets = await client.query(
+      `SELECT COUNT(*)::int AS n FROM fault_tickets WHERE atm_id = $1`,
+      [atm.atmId]
+    );
+    assert.equal(pastTickets.rows[0].n, 0);
+    const history = await client.query(
+      `SELECT COUNT(*)::int AS n FROM daily_withdrawals WHERE atm_id = $1 AND withdrawal_date = DATE '2024-08-02'`,
+      [atm.atmId]
+    );
+    assert.equal(history.rows[0].n, 1);
+
+    const mixed = [
+      'atm_code,txn_date,amount,txn_count,cash_level,fault_code,online',
+      `${atm.atmCode},${today},1500,3,10000,,`,
+      `${atm.atmCode},2024-01-15,1500,3,250000,,`,
+    ].join('\n');
+    const ordered = await importSwitchContent(client, {
+      filename: 'mixed.csv',
+      content: mixed,
+      replaceExisting: false,
+      rules: { cashThresholdPct: 20, offlineMinutes: 30 },
+    });
+    assert.equal(ordered.loaded, 2);
+    const afterMix = await client.query('SELECT current_cash FROM atms WHERE atm_id = $1', [atm.atmId]);
+    assert.equal(Number(afterMix.rows[0].current_cash), 10000);
+
     const low = await importSwitchContent(client, {
       filename: 'low.csv',
-      content: feedCsv(atm, { cash: 10000, date: '2024-08-02' }),
-      replaceExisting: false,
+      content: feedCsv(atm, { cash: 10000, date: today }),
+      replaceExisting: true,
       rules: { cashThresholdPct: 20, offlineMinutes: 30 },
     });
     assert.equal(low.loaded, 1);
     const again = await importSwitchContent(client, {
       filename: 'low-again.csv',
-      content: feedCsv(atm, { cash: 9000, date: '2024-08-02' }),
+      content: feedCsv(atm, { cash: 9000, date: today }),
       replaceExisting: true,
       rules: { cashThresholdPct: 20, offlineMinutes: 30 },
     });
@@ -90,8 +142,8 @@ test('ingestion raises one cash alert, one ticket per fault, and downtime only a
 
     const restored = await importSwitchContent(client, {
       filename: 'restored.csv',
-      content: feedCsv(atm, { cash: 70000, date: '2024-08-03' }),
-      replaceExisting: false,
+      content: feedCsv(atm, { cash: 250000, date: today }),
+      replaceExisting: true,
       rules: { cashThresholdPct: 20, offlineMinutes: 30 },
     });
     assert.equal(restored.loaded, 1);
@@ -103,17 +155,20 @@ test('ingestion raises one cash alert, one ticket per fault, and downtime only a
 
     await importSwitchContent(client, {
       filename: 'fault.csv',
-      content: feedCsv(atm, { date: '2024-08-04', fault: 'hardware' }),
+      content: feedCsv(atm, { date: today, fault: 'hardware' }),
+      replaceExisting: true,
       rules: { cashThresholdPct: 20, offlineMinutes: 30 },
     });
     await importSwitchContent(client, {
       filename: 'fault-again.csv',
-      content: feedCsv(atm, { date: '2024-08-05', fault: 'hardware' }),
+      content: feedCsv(atm, { date: today, fault: 'hardware' }),
+      replaceExisting: true,
       rules: { cashThresholdPct: 20, offlineMinutes: 30 },
     });
     await importSwitchContent(client, {
       filename: 'fault-other.csv',
-      content: feedCsv(atm, { date: '2024-08-06', fault: 'communication' }),
+      content: feedCsv(atm, { date: today, fault: 'communication' }),
+      replaceExisting: true,
       rules: { cashThresholdPct: 20, offlineMinutes: 30 },
     });
     const tickets = await client.query(
@@ -126,7 +181,8 @@ test('ingestion raises one cash alert, one ticket per fault, and downtime only a
 
     await importSwitchContent(client, {
       filename: 'off.csv',
-      content: feedCsv(atm, { date: '2024-08-07', online: '0' }),
+      content: feedCsv(atm, { date: today, online: '0' }),
+      replaceExisting: true,
       rules: { offlineMinutes: 30 },
     });
     const early = await client.query(
@@ -142,12 +198,14 @@ test('ingestion raises one cash alert, one ticket per fault, and downtime only a
     );
     await importSwitchContent(client, {
       filename: 'off-long.csv',
-      content: feedCsv(atm, { date: '2024-08-08', online: '0' }),
+      content: feedCsv(atm, { date: today, online: '0' }),
+      replaceExisting: true,
       rules: { offlineMinutes: 2 },
     });
     await importSwitchContent(client, {
       filename: 'off-still.csv',
-      content: feedCsv(atm, { date: '2024-08-09', online: '0' }),
+      content: feedCsv(atm, { date: today, online: '0' }),
+      replaceExisting: true,
       rules: { offlineMinutes: 2 },
     });
     const openDown = await client.query(
@@ -155,16 +213,39 @@ test('ingestion raises one cash alert, one ticket per fault, and downtime only a
       [atm.atmId]
     );
     assert.equal(openDown.rows[0].n, 1);
-    await importSwitchContent(client, {
-      filename: 'on.csv',
-      content: feedCsv(atm, { date: '2024-08-10', online: '1' }),
-      rules: { offlineMinutes: 2 },
-    });
-    const closedDown = await client.query(
-      `SELECT COUNT(*)::int AS n FROM downtime_log WHERE atm_id = $1 AND ended_at IS NULL`,
+    await client.query(
+      `INSERT INTO downtime_log (atm_id, started_at, reason, notes, origin)
+       VALUES ($1, CURRENT_TIMESTAMP - interval '2 hours', 'hardware', 'keep this note', NULL)`,
       [atm.atmId]
     );
-    assert.equal(closedDown.rows[0].n, 0);
+    await client.query(
+      `INSERT INTO downtime_log (atm_id, started_at, reason, notes, origin)
+       VALUES ($1, CURRENT_TIMESTAMP - interval '30 minutes', 'communication', 'feed still open', 'live_feed')`,
+      [atm.atmId]
+    );
+    await importSwitchContent(client, {
+      filename: 'on.csv',
+      content: feedCsv(atm, { date: today, online: '1' }),
+      replaceExisting: true,
+      rules: { offlineMinutes: 2 },
+    });
+    const stillOpen = await client.query(
+      `SELECT reason, notes, origin FROM downtime_log WHERE atm_id = $1 AND ended_at IS NULL ORDER BY reason`,
+      [atm.atmId]
+    );
+    assert.deepEqual(stillOpen.rows.map((row) => row.reason), ['hardware']);
+    assert.equal(stillOpen.rows[0].notes, 'keep this note');
+    await closeLiveFeedDowntime(client);
+    const afterClose = await client.query(
+      `SELECT COUNT(*)::int AS n FROM downtime_log WHERE atm_id = $1 AND ended_at IS NULL AND origin = 'live_feed'`,
+      [atm.atmId]
+    );
+    assert.equal(afterClose.rows[0].n, 0);
+    const hardwareLeft = await client.query(
+      `SELECT notes FROM downtime_log WHERE atm_id = $1 AND reason = 'hardware' AND ended_at IS NULL`,
+      [atm.atmId]
+    );
+    assert.equal(hardwareLeft.rows[0].notes, 'keep this note');
   });
 });
 
@@ -196,6 +277,8 @@ test('a simulator tick posts through the switch pipeline', async () => {
     });
     assert.equal(result.ok, true);
     assert.equal(result.source, 'simulator');
+    const named = await client.query('SELECT filename FROM switch_import_batches WHERE batch_id = $1', [result.batchId]);
+    assert.match(named.rows[0].filename, /^switch-feed-/);
     assert.equal(result.loaded, 1);
     const cash = await client.query('SELECT current_cash FROM atms WHERE atm_id = $1', [atm.atmId]);
     assert.ok(Number(cash.rows[0].current_cash) < 100000);
@@ -259,7 +342,8 @@ test('pages no longer describe the ledger as synthetic and imports are linked', 
   const home = await fetch(`${base}/`);
   const homeHtml = await home.text();
   assert.equal(home.status, 200);
-  assert.match(homeHtml, /Start live feed/);
+  assert.match(homeHtml, />Live feed</);
+  assert.doesNotMatch(homeHtml, /simulator/i);
   assert.match(homeHtml, /Cash alerts/);
   assert.match(homeHtml, /href="\/imports"/);
   assert.doesNotMatch(homeHtml, /synthetic|Demo data|sample data|fake data/i);

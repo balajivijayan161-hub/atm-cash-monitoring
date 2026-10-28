@@ -25,6 +25,7 @@ function createApp() {
   app.locals.prettyDateTime = prettyDateTime;
   app.locals.pageHref = pageHref;
   app.locals.label = (value) => String(value || '').replace(/_/g, ' ');
+  app.locals.sourceLabel = (value) => (value === 'simulator' ? 'Live feed' : app.locals.label(value || 'manual'));
   app.locals.jsonScript = (value) => JSON.stringify(value)
     .replace(/</g, '\\u003c')
     .replace(/\u2028/g, '\\u2028')
@@ -76,6 +77,7 @@ function createApp() {
   app.use(require('./routes/reports'));
   app.use(require('./routes/switch'));
   app.use(require('./routes/imports'));
+  app.use(require('./routes/lists'));
   app.use(require('./routes/simulator'));
   app.use(require('./routes/operations'));
 

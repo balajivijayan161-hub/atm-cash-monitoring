@@ -126,6 +126,14 @@ function prettyDateTime(value) {
   }).format(dt);
 }
 
+function pageWindow(page, pageSize, total) {
+  const size = Math.max(1, Number(pageSize) || 1);
+  const count = Math.max(0, Number(total) || 0);
+  const pages = Math.max(1, Math.ceil(count / size));
+  const current = Math.min(Math.max(1, Number(page) || 1), pages);
+  return { page: current, pages, offset: (current - 1) * size, pageSize: size, total: count };
+}
+
 function pageHref(base, query, page) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query || {})) {
@@ -153,4 +161,5 @@ module.exports = {
   prettyDate,
   prettyDateTime,
   pageHref,
+  pageWindow,
 };

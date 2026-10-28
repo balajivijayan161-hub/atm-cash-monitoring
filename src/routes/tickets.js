@@ -1,8 +1,9 @@
 const express = require('express');
 const { query } = require('../db');
-const { asyncRoute, renderPage, intOrNull } = require('../http');
+const { asyncRoute, renderPage, intOrNull, pageWindow } = require('../http');
 
 const router = express.Router();
+const PAGE_SIZE = 80;
 const STATUSES = ['open', 'assigned', 'closed'];
 const CATEGORIES = ['cash_variance', 'cash_out', 'hardware', 'communication', 'cassette_error'];
 
@@ -10,6 +11,16 @@ router.get('/tickets', asyncRoute(async (req, res) => {
   const status = STATUSES.includes(req.query.status) ? req.query.status : '';
   const category = CATEGORIES.includes(req.query.category) ? req.query.category : '';
   const focusId = intOrNull(req.query.ticket);
+  const filters = [status || null, category || null];
+  const where = `WHERE ($1::text IS NULL OR ft.status = $1)
+         AND ($2::text IS NULL OR ft.category = $2)`;
+  const count = await query(
+    `SELECT COUNT(*)::int AS total
+     FROM fault_tickets ft
+     ${where}`,
+    filters
+  );
+  const window = pageWindow(parseInt(req.query.page, 10), PAGE_SIZE, count.rows[0].total);
   const [rows, engineers] = await Promise.all([
     query(
       `SELECT ft.ticket_id, ft.ticket_no, ft.title, ft.category, ft.priority, ft.status, ft.source,
@@ -20,13 +31,12 @@ router.get('/tickets', asyncRoute(async (req, res) => {
        JOIN branches b ON b.branch_id = a.branch_id
        JOIN locations l ON l.location_id = b.location_id
        LEFT JOIN engineers e ON e.engineer_id = ft.engineer_id
-       WHERE ($1::text IS NULL OR ft.status = $1)
-         AND ($2::text IS NULL OR ft.category = $2)
+       ${where}
        ORDER BY (ft.ticket_id = $3::int) DESC,
                 CASE ft.status WHEN 'open' THEN 0 WHEN 'assigned' THEN 1 ELSE 2 END,
                 ft.opened_at DESC
-       LIMIT 80`,
-      [status || null, category || null, focusId]
+       LIMIT $4 OFFSET $5`,
+      [...filters, focusId, PAGE_SIZE, window.offset]
     ),
     query(`SELECT engineer_id, full_name, specialty FROM engineers WHERE active ORDER BY full_name`),
   ]);
@@ -34,8 +44,10 @@ router.get('/tickets', asyncRoute(async (req, res) => {
     title: 'Fault tickets',
     rows: rows.rows,
     engineers: engineers.rows,
-    filters: { status, category },
+    filters: { status, category, ticket: focusId || '' },
     focusId,
+    page: window.page,
+    pages: window.pages,
     statuses: STATUSES,
     categories: CATEGORIES,
   });
