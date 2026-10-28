@@ -44,3 +44,5 @@ services:
         sync: false
       - key: ADMIN_RECOVERY
         sync: false
+      - key: CSP_MODE
+        value: enforce

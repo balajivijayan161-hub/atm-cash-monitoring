@@ -19,6 +19,24 @@ const {
   formatLabel,
 } = require('./http');
 
+function contentSecurityPolicy() {
+  const mode = String(process.env.CSP_MODE || 'enforce').trim().toLowerCase();
+  if (mode === 'off') return false;
+  return {
+    reportOnly: mode === 'report-only',
+    useDefaults: true,
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      imgSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'"],
+      frameAncestors: ["'none'"],
+    },
+  };
+}
+
 function createApp() {
   const app = express();
   app.set('view engine', 'ejs');
@@ -26,18 +44,7 @@ function createApp() {
   app.set('trust proxy', 1);
   app.disable('x-powered-by');
   app.use(helmet({
-    contentSecurityPolicy: {
-      useDefaults: true,
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
-        imgSrc: ["'self'", 'data:'],
-        connectSrc: ["'self'"],
-        frameAncestors: ["'none'"],
-      },
-    },
+    contentSecurityPolicy: contentSecurityPolicy(),
     frameguard: { action: 'deny' },
     strictTransportSecurity: process.env.NODE_ENV === 'production' ? undefined : false,
   }));
