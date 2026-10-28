@@ -2,7 +2,7 @@
   <div>
     <p class="eyebrow">Same weekday</p>
     <h1>Cash Forecast</h1>
-    <p class="lede">The forecast is this ATM’s average withdrawal on the same weekday over the previous 28 days, up to four weeks.</p>
+    <p class="lede">The forecast starts from this ATM’s average withdrawal on the same weekday over the previous 28 days, then lifts for salary days, month-end, and holidays.</p>
   </div>
 </header>
 <form class="filters" method="get" action="/forecast">
@@ -30,7 +30,7 @@
     <article class="kpi">
       <span>Forecast for <%= result.weekday %></span>
       <strong><%= inr(result.forecast) %></strong>
-      <em><%= result.points.length %> same-weekday point<%= result.points.length === 1 ? '' : 's' %></em>
+      <em><%= result.points.length %> same-weekday point<%= result.points.length === 1 ? '' : 's' %><% if (result.factor && result.factor !== 1) { %>, calendar factor <%= result.factor %><% } %></em>
     </article>
     <article class="kpi">
       <span>Cash in <%= result.atm.atm_code %></span>
@@ -64,4 +64,26 @@
       </table>
     </div>
   </section>
+  <% if (result.suggestion) { %>
+    <section class="section">
+      <h2>Suggested Notes</h2>
+      <p class="hint">Tomorrow’s forecast minus cash still in the machine, split by this ATM’s usual mix and capped by each cassette.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Denomination</th><th class="num">Notes</th><th class="num">Amount</th><th class="num">Cassette Capacity</th></tr></thead>
+          <tbody>
+            <% result.suggestion.notes.forEach((row) => { %>
+              <tr>
+                <td>₹<%= row.denomination %></td>
+                <td class="num"><%= row.notes %></td>
+                <td class="num"><%= inr(row.amount) %></td>
+                <td class="num"><%= row.capacityNotes %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% if (can.createRun) { %><p style="margin-top:10px"><a class="btn" href="/runs/new?atm_id=<%= result.atm.atm_id %>">Use on a Replenishment Run</a></p><% } %>
+    </section>
+  <% } %>
 <% } %>

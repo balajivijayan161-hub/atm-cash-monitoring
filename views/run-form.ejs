@@ -5,6 +5,9 @@
     <p class="lede">Each row is one cassette on this trip. Total loaded is denomination times note count, and it updates as you type.</p>
   </div>
 </header>
+<% if (typeof suggestion !== 'undefined' && suggestion) { %>
+  <p class="hint">Suggested load for <%= suggestion.atmCode %> is filled in below. Change any note count before saving.</p>
+<% } %>
 <% if (errors.length) { %>
   <div class="errors" role="alert">
     <ul><% errors.forEach((item) => { %><li><%= item %></li><% }) %></ul>

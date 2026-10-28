@@ -5,6 +5,7 @@ const { requireCan, requireAny, deny } = require('../auth/gate');
 const { can } = require('../auth/permissions');
 const { recordChange } = require('../auth/activity');
 const { loadReference } = require('../services/reference');
+const { loadSuggestion } = require('../services/denom');
 const { saveRun } = require('../services/runs');
 const { totalLoaded } = require('../../public/js/money');
 
@@ -109,6 +110,17 @@ router.get('/runs/new', requireCan('createRun'), asyncRoute(async (req, res) => 
     loadReference(),
     query(`SELECT (CURRENT_DATE + 1)::text AS tomorrow`),
   ]);
+  const atmId = intOrNull(req.query.atm_id);
+  const suggestion = atmId ? await loadSuggestion({ query }, atmId) : null;
+  const lines = suggestion && suggestion.notes.some((row) => row.notes > 0)
+    ? suggestion.notes.filter((row) => row.notes > 0).map((row, index) => ({
+      atmCode: suggestion.atmCode,
+      cassette: index + 1,
+      denomination: row.denomination,
+      noteCount: row.notes,
+      amount: row.amount,
+    }))
+    : [blankLine()];
   renderPage(req, res, 'run-form', {
     title: 'New Replenishment Run',
     action: '/runs',
@@ -121,8 +133,9 @@ router.get('/runs/new', requireCan('createRun'), asyncRoute(async (req, res) => 
       custodian_id: '',
       notes: '',
     },
-    lines: [blankLine()],
-    total: 0,
+    lines,
+    suggestion,
+    total: lines.reduce((sum, line) => sum + Number(line.amount || 0), 0),
     errors: [],
     ref,
   });

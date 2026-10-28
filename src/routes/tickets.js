@@ -72,7 +72,8 @@ router.post('/tickets/:id/assign', requireCan('assignTickets'), asyncRoute(async
     `UPDATE fault_tickets
      SET engineer_id = $2,
          status = 'assigned',
-         assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP)
+         assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP),
+         responded_at = COALESCE(responded_at, CURRENT_TIMESTAMP)
      WHERE ticket_id = $1
        AND status <> 'closed'
      RETURNING ticket_no`,
@@ -100,6 +101,7 @@ router.post('/tickets/:id/close', asyncRoute(async (req, res) => {
     `UPDATE fault_tickets
      SET status = 'closed',
          closed_at = CURRENT_TIMESTAMP,
+         resolved_at = COALESCE(resolved_at, CURRENT_TIMESTAMP),
          resolution = NULLIF($2, '')
      WHERE ticket_id = $1 AND status <> 'closed'
      RETURNING ticket_no`,

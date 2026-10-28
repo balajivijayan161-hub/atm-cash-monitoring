@@ -29,6 +29,9 @@
       </tbody>
     </table>
   </div>
+  <% if (slaBreaches > 0 && can.reports) { %>
+    <p class="hint" style="margin-top:8px"><a href="/reports/sla"><%= slaBreaches %> open ticket<%= slaBreaches === 1 ? '' : 's' %> past an SLA target</a></p>
+  <% } %>
   <% if (cashouts.length) { %>
     <h3 style="margin-top:18px">Likely Cash-Out Within 24 Hours</h3>
     <div class="table-wrap">

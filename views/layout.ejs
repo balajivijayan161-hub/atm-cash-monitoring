@@ -31,6 +31,8 @@
       <p class="nav-label">Cash</p>
       <nav class="nav" aria-label="Cash">
         <% if (can.forecast) { %><a class="<%= navClass('/forecast') %>" href="/forecast"<% if (navClass('/forecast')) { %> aria-current="page"<% } %>>Cash Forecast</a><% } %>
+        <% if (can.forecast) { %><a class="<%= navClass('/forecast/accuracy') %>" href="/forecast/accuracy"<% if (navClass('/forecast/accuracy')) { %> aria-current="page"<% } %>>Forecast Accuracy</a><% } %>
+        <% if (can.manageUsers) { %><a class="<%= navClass('/forecast/calendar') %>" href="/forecast/calendar"<% if (navClass('/forecast/calendar')) { %> aria-current="page"<% } %>>Holiday Calendar</a><% } %>
         <% if (can.runs) { %><a class="<%= navClass('/runs') %>" href="/runs"<% if (navClass('/runs')) { %> aria-current="page"<% } %>>Replenishment Runs</a><% } %>
         <% if (can.recons) { %><a class="<%= navClass('/reconciliations') %>" href="/reconciliations"<% if (navClass('/reconciliations')) { %> aria-current="page"<% } %>>Reconciliation</a><% } %>
         <% if (can.importData) { %><a class="<%= navClass('/switch') %>" href="/switch"<% if (navClass('/switch')) { %> aria-current="page"<% } %>>Bank Data Import</a><% } %>
@@ -42,6 +44,8 @@
         <% if (can.reports) { %><a class="<%= navClass('/reports/van-cashouts') %>" href="/reports/van-cashouts"<% if (navClass('/reports/van-cashouts')) { %> aria-current="page"<% } %>>Van Cash-Outs</a><% } %>
         <% if (can.reports) { %><a class="<%= navClass('/reports/withdrawal-matrix') %>" href="/reports/withdrawal-matrix"<% if (navClass('/reports/withdrawal-matrix')) { %> aria-current="page"<% } %>>Withdrawal Matrix</a><% } %>
         <% if (can.reports) { %><a class="<%= navClass('/reports/downtime-by-location') %>" href="/reports/downtime-by-location"<% if (navClass('/reports/downtime-by-location')) { %> aria-current="page"<% } %>>Downtime by Location</a><% } %>
+        <% if (can.reports) { %><a class="<%= navClass('/reports/sla') %>" href="/reports/sla"<% if (navClass('/reports/sla')) { %> aria-current="page"<% } %>>SLA Report</a><% } %>
+        <% if (can.reports) { %><a class="<%= navClass('/reports/recon-ageing') %>" href="/reports/recon-ageing"<% if (navClass('/reports/recon-ageing')) { %> aria-current="page"<% } %>>Open Case Ageing</a><% } %>
         <% if (can.journals) { %><a class="<%= navClass('/operations/ej-archive') %>" href="/operations/ej-archive"<% if (navClass('/operations/ej-archive')) { %> aria-current="page"<% } %>>Electronic Journal Archive</a><% } %>
         <% if (can.manageUsers) { %><a class="<%= navClass('/users') %>" href="/users"<% if (navClass('/users')) { %> aria-current="page"<% } %>>User Accounts</a><% } %>
         <% if (can.activity) { %><a class="<%= navClass('/activity') %>" href="/activity"<% if (navClass('/activity')) { %> aria-current="page"<% } %>>Activity</a><% } %>

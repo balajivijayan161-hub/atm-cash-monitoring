@@ -21,7 +21,9 @@
           <td class="num"><%= inr(row.counted_amount) %></td>
           <td class="num <%= Number(row.difference) ? 'bad-num' : '' %>"><%= inr(row.difference) %></td>
           <td>
-            <% if (row.ticket_no) { %>
+            <% if (row.case_status) { %>
+              <a href="/reconciliations/<%= row.reconciliation_id %>"><%= label(row.case_status) %></a>
+            <% } else if (row.ticket_no) { %>
               <a href="/tickets"><%= row.ticket_no %></a>
               <span class="pill <%= row.ticket_status %>"><%= row.ticket_status %></span>
             <% } else { %>Matched<% } %>

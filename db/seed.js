@@ -1,4 +1,5 @@
 const { pool, ensureSchema } = require('../src/db');
+const { forecastFactor } = require('../src/services/calendar');
 
 const LOCATIONS = [
   { code: 'MUM', name: 'Mumbai Metro', city: 'Mumbai', state: 'Maharashtra', region: 'West', plate: 'MH' },
@@ -95,6 +96,10 @@ async function seedIfEmpty(client) {
   if (existing.rowCount) return false;
 
   const today = (await client.query(`SELECT CURRENT_DATE::text AS today`)).rows[0].today;
+  const holidayRows = await client.query(
+    `SELECT holiday_date::text AS holiday_date, multiplier FROM holidays WHERE active`
+  );
+  const holidayFactor = new Map(holidayRows.rows.map((row) => [row.holiday_date, Number(row.multiplier)]));
   const rng = mulberry32(20261027);
   const dates = [];
   for (let offset = 62; offset >= 0; offset -= 1) dates.push(addDays(today, -offset));
@@ -143,7 +148,7 @@ async function seedIfEmpty(client) {
     const daily = [];
     for (const date of dates) {
       const noise = 0.88 + rng() * 0.24;
-      const amount = Math.max(20000, round100(base * DOW_MULT[dow(date)] * noise));
+      const amount = Math.max(20000, round100(base * DOW_MULT[dow(date)] * noise * forecastFactor(date, holidayFactor.get(date) || 1)));
       const txn = Math.max(8, Math.min(900, Math.round(amount / (1800 + rng() * 800))));
       daily.push({ date, amount, txn });
       sum += amount;

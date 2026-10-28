@@ -1,0 +1,67 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Response and resolution</p>
+    <h1>SLA Report</h1>
+    <p class="lede">A ticket is past target when the response or the resolution takes longer than the hours set for its category.</p>
+  </div>
+</header>
+<% targets.forEach((row) => { %>
+  <form class="filters" method="post" action="/reports/sla">
+    <%- csrfField %>
+    <input type="hidden" name="category" value="<%= row.category %>">
+    <p class="field"><strong><%= label(row.category) %></strong></p>
+    <label class="field">Response hours
+      <input name="response_hours" type="number" min="0.5" step="0.5" value="<%= row.response_hours %>" <%= canEdit ? '' : 'readonly' %>>
+    </label>
+    <label class="field">Resolution hours
+      <input name="resolution_hours" type="number" min="0.5" step="0.5" value="<%= row.resolution_hours %>" <%= canEdit ? '' : 'readonly' %>>
+    </label>
+    <% if (canEdit) { %><button class="btn" type="submit">Save</button><% } %>
+  </form>
+<% }) %>
+<section class="section">
+  <h2>By Category</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Category</th><th class="num">Tickets</th><th class="num">Breaches</th><th class="num">Breach %</th></tr></thead>
+      <tbody>
+        <% byCategory.forEach((row) => { %>
+          <tr>
+            <td><%= label(row.category) %></td>
+            <td class="num"><%= row.tickets %></td>
+            <td class="num"><%= row.breaches %></td>
+            <td class="num"><%= row.tickets ? Math.round((row.breaches / row.tickets) * 1000) / 10 : 0 %>%</td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</section>
+<section class="section two-col">
+  <div>
+    <h2>By Location</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Location</th><th class="num">Tickets</th><th class="num">Breaches</th></tr></thead>
+        <tbody>
+          <% byLocation.forEach((row) => { %>
+            <tr><td><%= row.location_name %></td><td class="num"><%= row.tickets %></td><td class="num"><%= row.breaches %></td></tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div>
+    <h2>By Engineer</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Engineer</th><th class="num">Tickets</th><th class="num">Breaches</th></tr></thead>
+        <tbody>
+          <% byEngineer.forEach((row) => { %>
+            <tr><td><%= row.engineer_name %></td><td class="num"><%= row.tickets %></td><td class="num"><%= row.breaches %></td></tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

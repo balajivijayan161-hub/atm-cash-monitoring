@@ -1,0 +1,69 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Forecast vs actual</p>
+    <h1>Forecast Accuracy</h1>
+    <p class="lede">Each day compares the forecast with the cash that was actually withdrawn. Error is the average absolute percentage gap.</p>
+  </div>
+</header>
+<form class="filters" method="get" action="/forecast/accuracy">
+  <label class="field grow">ATM
+    <select name="atm_id" required>
+      <option value="">Choose an ATM</option>
+      <% atms.forEach((atm) => { %>
+        <option value="<%= atm.atm_id %>" <%= String(atmId) === String(atm.atm_id) ? 'selected' : '' %>><%= atm.atm_code %> — <%= atm.site_name %></option>
+      <% }) %>
+    </select>
+  </label>
+  <label class="field">Window
+    <select name="window">
+      <option value="7" <%= windowDays === 7 ? 'selected' : '' %>>Last 7 days</option>
+      <option value="28" <%= windowDays === 28 ? 'selected' : '' %>>Last 28 days</option>
+    </select>
+  </label>
+  <button class="btn btn-primary" type="submit">Show</button>
+</form>
+<% if (atmId) { %>
+  <section class="kpi-grid">
+    <article class="kpi">
+      <span>Average error</span>
+      <strong><%= errorPct == null ? '—' : errorPct + '%' %></strong>
+      <em>Last <%= windowDays %> days</em>
+    </article>
+  </section>
+  <section class="section card">
+    <h3>Forecast and Actual</h3>
+    <div class="chart-box"><canvas id="accuracy-chart"></canvas></div>
+  </section>
+  <div class="table-wrap">
+    <table class="stack-rows">
+      <thead><tr><th>Day</th><th class="num">Forecast</th><th class="num">Actual</th><th class="num">Error</th></tr></thead>
+      <tbody>
+        <% rows.forEach((row) => { %>
+          <tr>
+            <td data-label="Day"><%= prettyDate(row.day) %></td>
+            <td class="num" data-label="Forecast"><%= inr(row.forecast) %></td>
+            <td class="num" data-label="Actual"><%= inr(row.actual) %></td>
+            <td class="num" data-label="Error"><%= row.error == null ? '—' : row.error + '%' %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+  <script src="/vendor/chart.umd.js"></script>
+  <script>
+    const chart = <%- jsonScript(chart) %>;
+    if (typeof Chart !== 'undefined') {
+      new Chart(document.getElementById('accuracy-chart'), {
+        type: 'line',
+        data: {
+          labels: chart.labels,
+          datasets: [
+            { label: 'Forecast', data: chart.forecast, borderColor: '#8d6a3a', tension: 0.2 },
+            { label: 'Actual', data: chart.actual, borderColor: '#1e4d5c', tension: 0.2 },
+          ],
+        },
+        options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
+      });
+    }
+  </script>
+<% } %>

@@ -29,7 +29,9 @@ test('forecast_cash averages the same weekday across the prior 28 days', async (
       'SELECT forecast_cash($1, $2::date) AS forecast',
       [atm.atmId, '2026-10-30']
     );
-    assert.equal(Number(forecast.rows[0].forecast), 100000);
+    const factor = await client.query(`SELECT forecast_multiplier(DATE '2026-10-30') AS factor`);
+    assert.equal(Number(factor.rows[0].factor), 1.2);
+    assert.equal(Number(forecast.rows[0].forecast), 120000);
 
     const points = await client.query(
       'SELECT withdrawal_date::text AS withdrawal_date, amount FROM forecast_cash_points($1, $2::date)',
@@ -42,7 +44,7 @@ test('forecast_cash averages the same weekday across the prior 28 days', async (
       '2026-10-23',
     ]);
     const average = points.rows.reduce((sum, row) => sum + Number(row.amount), 0) / points.rows.length;
-    assert.equal(average, Number(forecast.rows[0].forecast));
+    assert.equal(Math.round(average * Number(factor.rows[0].factor) * 100) / 100, Number(forecast.rows[0].forecast));
   });
 });
 

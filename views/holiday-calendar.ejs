@@ -1,0 +1,32 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Super Admin</p>
+    <h1>Holiday Calendar</h1>
+    <p class="lede">These dates raise the cash forecast. Add or replace a date; the multiplier applies on top of salary days and month-end.</p>
+  </div>
+</header>
+<% if (errors.length) { %>
+  <div class="errors" role="alert"><ul><% errors.forEach((item) => { %><li><%= item %></li><% }) %></ul></div>
+<% } %>
+<form class="filters" method="post" action="/forecast/calendar">
+  <%- csrfField %>
+  <label class="field">Date<input type="date" name="holiday_date" required></label>
+  <label class="field">Name<input name="name" required maxlength="80"></label>
+  <label class="field">Multiplier<input name="multiplier" type="number" min="0.1" max="5" step="0.05" value="1.50" required></label>
+  <button class="btn btn-primary" type="submit">Save Holiday</button>
+</form>
+<div class="table-wrap">
+  <table class="stack-rows">
+    <thead><tr><th>Date</th><th>Name</th><th class="num">Multiplier</th><th>Active</th></tr></thead>
+    <tbody>
+      <% rows.forEach((row) => { %>
+        <tr>
+          <td data-label="Date"><%= prettyDate(row.holiday_date) %></td>
+          <td data-label="Name"><%= row.name %></td>
+          <td class="num" data-label="Multiplier"><%= row.multiplier %></td>
+          <td data-label="Active"><%= row.active ? 'Yes' : 'No' %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>

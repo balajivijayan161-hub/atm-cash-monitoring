@@ -1,0 +1,30 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Still open</p>
+    <h1>Open Case Ageing</h1>
+    <p class="lede">Variance cases that are raised or still being investigated, counted by how long they have been open.</p>
+  </div>
+</header>
+<section class="kpi-grid">
+  <article class="kpi"><span>Under 2 days</span><strong><%= buckets.under2 %></strong></article>
+  <article class="kpi"><span>2 to 6 days</span><strong><%= buckets.under7 %></strong></article>
+  <article class="kpi"><span>7 to 13 days</span><strong><%= buckets.under14 %></strong></article>
+  <article class="kpi"><span>14 days or more</span><strong><%= buckets.older %></strong></article>
+</section>
+<div class="table-wrap">
+  <table class="stack-rows">
+    <thead><tr><th>ATM</th><th>Location</th><th>Status</th><th class="num">Age</th><th class="num">Difference</th></tr></thead>
+    <tbody>
+      <% if (!rows.length) { %><tr><td colspan="5" class="empty">No open variance cases.</td></tr><% } %>
+      <% rows.forEach((row) => { %>
+        <tr>
+          <td data-label="ATM"><a href="/reconciliations/<%= row.reconciliation_id %>"><%= row.atm_code %></a></td>
+          <td data-label="Location"><%= row.location_name %></td>
+          <td data-label="Status"><%= label(row.case_status) %></td>
+          <td class="num" data-label="Age"><%= row.age_days %> day<%= row.age_days === 1 ? '' : 's' %></td>
+          <td class="num" data-label="Difference"><%= inr(row.difference) %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>

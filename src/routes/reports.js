@@ -1,8 +1,9 @@
 const express = require('express');
 const { query } = require('../db');
 const { asyncRoute, renderPage, intOrNull } = require('../http');
-const { requireCan } = require('../auth/gate');
+const { requireCan, deny } = require('../auth/gate');
 const { scopeBinds, atmScopeSql } = require('../auth/permissions');
+const { recordChange } = require('../auth/activity');
 const { lastEightWeeks } = require('../lib/windows');
 
 const router = express.Router();
@@ -125,6 +126,104 @@ router.get('/reports/downtime-by-location', asyncRoute(async (req, res) => {
     reasons: reasons.rows,
     maxDowntime,
   });
+}));
+
+router.get('/reports/sla', asyncRoute(async (req, res) => {
+  const [targets, byCategory, byLocation, byEngineer] = await Promise.all([
+    query('SELECT category, response_hours, resolution_hours FROM sla_targets ORDER BY category'),
+    query(`SELECT sla_category(ft.category) AS category,
+                  COUNT(*)::int AS tickets,
+                  COUNT(*) FILTER (WHERE
+                    EXTRACT(EPOCH FROM (COALESCE(ft.responded_at, CASE WHEN ft.status = 'closed' THEN ft.closed_at ELSE CURRENT_TIMESTAMP END) - ft.opened_at)) / 3600
+                      > s.response_hours
+                    OR EXTRACT(EPOCH FROM (COALESCE(ft.resolved_at, ft.closed_at, CURRENT_TIMESTAMP) - ft.opened_at)) / 3600
+                      > s.resolution_hours
+                  )::int AS breaches
+           FROM fault_tickets ft
+           JOIN sla_targets s ON s.category = sla_category(ft.category)
+           GROUP BY 1
+           ORDER BY 1`),
+    query(`SELECT l.location_name,
+                  COUNT(*)::int AS tickets,
+                  COUNT(*) FILTER (WHERE
+                    EXTRACT(EPOCH FROM (COALESCE(ft.resolved_at, ft.closed_at, CURRENT_TIMESTAMP) - ft.opened_at)) / 3600
+                      > s.resolution_hours
+                  )::int AS breaches
+           FROM fault_tickets ft
+           JOIN sla_targets s ON s.category = sla_category(ft.category)
+           JOIN atms a ON a.atm_id = ft.atm_id
+           JOIN branches b ON b.branch_id = a.branch_id
+           JOIN locations l ON l.location_id = b.location_id
+           GROUP BY l.location_name
+           ORDER BY breaches DESC, l.location_name
+           LIMIT 20`),
+    query(`SELECT COALESCE(e.full_name, 'Unassigned') AS engineer_name,
+                  COUNT(*)::int AS tickets,
+                  COUNT(*) FILTER (WHERE
+                    EXTRACT(EPOCH FROM (COALESCE(ft.resolved_at, ft.closed_at, CURRENT_TIMESTAMP) - ft.opened_at)) / 3600
+                      > s.resolution_hours
+                  )::int AS breaches
+           FROM fault_tickets ft
+           JOIN sla_targets s ON s.category = sla_category(ft.category)
+           LEFT JOIN engineers e ON e.engineer_id = ft.engineer_id
+           GROUP BY e.full_name
+           ORDER BY breaches DESC, engineer_name
+           LIMIT 20`),
+  ]);
+  renderPage(req, res, 'sla-report', {
+    title: 'SLA Report',
+    targets: targets.rows,
+    byCategory: byCategory.rows,
+    byLocation: byLocation.rows,
+    byEngineer: byEngineer.rows,
+    canEdit: req.user.role === 'super_admin',
+  });
+}));
+
+router.post('/reports/sla', asyncRoute(async (req, res) => {
+  if (req.user.role !== 'super_admin') return deny(req, res);
+  const category = String(req.body.category || '');
+  const responseHours = Number(req.body.response_hours);
+  const resolutionHours = Number(req.body.resolution_hours);
+  const known = await query('SELECT response_hours, resolution_hours FROM sla_targets WHERE category = $1', [category]);
+  if (!known.rowCount) return res.redirect('/reports/sla?warning=Choose a category.');
+  if (!(responseHours > 0) || !(resolutionHours > 0)) {
+    return res.redirect('/reports/sla?warning=Enter hours greater than zero.');
+  }
+  await query(
+    `UPDATE sla_targets SET response_hours = $2, resolution_hours = $3 WHERE category = $1`,
+    [category, responseHours, resolutionHours]
+  );
+  await recordChange(req, {
+    action: 'update',
+    entity: 'sla target',
+    entityId: category,
+    before: known.rows[0],
+    after: { response_hours: responseHours, resolution_hours: resolutionHours },
+  });
+  res.redirect('/reports/sla?notice=SLA target updated.');
+}));
+
+router.get('/reports/recon-ageing', asyncRoute(async (req, res) => {
+  const rows = await query(
+    `SELECT r.reconciliation_id, r.case_status, r.created_at, r.difference,
+            a.atm_code, l.location_name,
+            GREATEST(0, EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - r.created_at)) / 86400)::int AS age_days
+     FROM reconciliations r
+     JOIN atms a ON a.atm_id = r.atm_id
+     JOIN branches b ON b.branch_id = a.branch_id
+     JOIN locations l ON l.location_id = b.location_id
+     WHERE r.case_status IN ('raised', 'investigating')
+     ORDER BY r.created_at`
+  );
+  const buckets = { under2: 0, under7: 0, under14: 0, older: 0 };
+  for (const row of rows.rows) {
+    if (row.age_days < 2) buckets.under2 += 1;
+    else if (row.age_days < 7) buckets.under7 += 1;
+    else if (row.age_days < 14) buckets.under14 += 1;
+    else buckets.older += 1;
+  }
+  renderPage(req, res, 'recon-ageing', { title: 'Open Case Ageing', rows: rows.rows, buckets });
 }));
 
 module.exports = router;

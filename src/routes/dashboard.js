@@ -10,7 +10,7 @@ const { hoursToEmpty, runsOutWithinDay } = require('../services/cashout');
 const router = express.Router();
 
 router.get('/', requireCan('dashboard'), asyncRoute(async (req, res) => {
-  const [fleet, tickets, runs, dispensed, byLocation, byDay, byWeekday, worst, recentTickets, alerts, alertCount, downtimeOpen, downtimeCount, cashoutRows] = await Promise.all([
+  const [fleet, tickets, runs, dispensed, byLocation, byDay, byWeekday, worst, recentTickets, alerts, alertCount, downtimeOpen, downtimeCount, cashoutRows, slaBreaches] = await Promise.all([
     query(`SELECT
              COUNT(*)::int AS atms,
              ROUND(AVG(downtime_pct)::numeric, 2) AS avg_downtime_pct,
@@ -124,6 +124,14 @@ router.get('/', requireCan('dashboard'), asyncRoute(async (req, res) => {
          AND a.atm_id IN (${atmScopeSql(1)})`,
       scopeBinds(req.user)
     ),
+    query(`SELECT COUNT(*)::int AS n
+           FROM fault_tickets ft
+           JOIN sla_targets s ON s.category = sla_category(ft.category)
+           WHERE ft.status <> 'closed'
+             AND (
+               EXTRACT(EPOCH FROM (COALESCE(ft.responded_at, CURRENT_TIMESTAMP) - ft.opened_at)) / 3600 > s.response_hours
+               OR EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - ft.opened_at)) / 3600 > s.resolution_hours
+             )`),
   ]);
 
   const fleetRow = fleet.rows[0] || {};
@@ -147,6 +155,7 @@ router.get('/', requireCan('dashboard'), asyncRoute(async (req, res) => {
     alertTotal: alertCount.rows[0].n,
     downtimeOpen: downtimeOpen.rows,
     downtimeTotal: downtimeCount.rows[0].n,
+    slaBreaches: slaBreaches.rows[0].n,
     cashouts: cashoutRows.rows
       .map((row) => ({ ...row, hours: hoursToEmpty(row.current_cash, row.forecast) }))
       .filter((row) => runsOutWithinDay(row.hours))

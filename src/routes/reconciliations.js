@@ -1,8 +1,10 @@
 const express = require('express');
 const { query, withTransaction } = require('../db');
 const { asyncRoute, renderPage, intOrNull, isIsoDate, inr, parseLedgerAmount, ledgerAmountError } = require('../http');
-const { requireCan } = require('../auth/gate');
+const { requireCan, deny } = require('../auth/gate');
+const { can } = require('../auth/permissions');
 const { recordChange } = require('../auth/activity');
+const { REASONS, caseChangeError } = require('../services/reconCase');
 
 const router = express.Router();
 router.use(requireCan('recons'));
@@ -10,7 +12,7 @@ router.use(requireCan('recons'));
 router.get('/reconciliations', asyncRoute(async (req, res) => {
   const rows = await query(
     `SELECT r.reconciliation_id, r.recon_date::text AS recon_date, r.expected_amount, r.counted_amount,
-            r.difference, r.notes, r.created_at, a.atm_id, a.atm_code, a.site_name,
+            r.difference, r.notes, r.created_at, r.case_status, a.atm_id, a.atm_code, a.site_name,
             ft.ticket_id, ft.ticket_no, ft.status AS ticket_status
      FROM reconciliations r
      JOIN atms a ON a.atm_id = r.atm_id
@@ -142,6 +144,97 @@ router.post('/reconciliations', requireCan('createRecon'), asyncRoute(async (req
     return res.redirect(`/tickets?notice=${encodeURIComponent(notice)}`);
   }
   return res.redirect('/reconciliations?notice=Reconciliation saved. The count matched, so no fault ticket was raised.');
+}));
+
+router.get('/reconciliations/:id', asyncRoute(async (req, res) => {
+  const id = intOrNull(req.params.id);
+  if (!id) return renderPage(req, res, 'not-found', { title: 'Case Not Found', statusCode: 404 });
+  const row = await query(
+    `SELECT r.*, r.recon_date::text AS recon_date, a.atm_code, a.site_name, u.full_name AS assignee_name
+     FROM reconciliations r
+     JOIN atms a ON a.atm_id = r.atm_id
+     LEFT JOIN users u ON u.user_id = r.assignee_id
+     WHERE r.reconciliation_id = $1`,
+    [id]
+  );
+  if (!row.rowCount || !row.rows[0].case_status) {
+    return renderPage(req, res, 'not-found', { title: 'Case Not Found', statusCode: 404 });
+  }
+  const comments = await query(
+    `SELECT c.body, c.created_at, u.full_name
+     FROM recon_comments c
+     LEFT JOIN users u ON u.user_id = c.user_id
+     WHERE c.reconciliation_id = $1
+     ORDER BY c.created_at`,
+    [id]
+  );
+  const people = await query(`SELECT user_id, full_name, role FROM users WHERE active ORDER BY full_name`);
+  renderPage(req, res, 'recon-case', {
+    title: 'Variance Case',
+    item: row.rows[0],
+    comments: comments.rows,
+    people: people.rows,
+    reasons: REASONS,
+    canApprove: can(req.user, 'approveRecons'),
+  });
+}));
+
+router.post('/reconciliations/:id/comment', asyncRoute(async (req, res) => {
+  const id = intOrNull(req.params.id);
+  const body = String(req.body.body || '').trim().slice(0, 2000);
+  if (!id || !body) return res.redirect(`/reconciliations/${id || ''}?warning=Enter a note.`);
+  const found = await query(`SELECT case_status FROM reconciliations WHERE reconciliation_id = $1`, [id]);
+  if (!found.rowCount) return renderPage(req, res, 'not-found', { title: 'Case Not Found', statusCode: 404 });
+  await query(
+    `INSERT INTO recon_comments (reconciliation_id, user_id, body) VALUES ($1, $2, $3)`,
+    [id, req.user.user_id, body]
+  );
+  await recordChange(req, {
+    action: 'create',
+    entity: 'variance note',
+    entityId: id,
+    before: null,
+    after: { note: body },
+  });
+  res.redirect(`/reconciliations/${id}?notice=Note added.`);
+}));
+
+router.post('/reconciliations/:id/status', asyncRoute(async (req, res) => {
+  const id = intOrNull(req.params.id);
+  if (!id) return renderPage(req, res, 'not-found', { title: 'Case Not Found', statusCode: 404 });
+  const found = await query(`SELECT case_status, reason_code FROM reconciliations WHERE reconciliation_id = $1`, [id]);
+  if (!found.rowCount || !found.rows[0].case_status) {
+    return renderPage(req, res, 'not-found', { title: 'Case Not Found', statusCode: 404 });
+  }
+  const to = String(req.body.case_status || '');
+  const reason = String(req.body.reason_code || found.rows[0].reason_code || '');
+  const assignee = intOrNull(req.body.assignee_id);
+  const error = caseChangeError({
+    from: found.rows[0].case_status,
+    to,
+    canApprove: can(req.user, 'approveRecons'),
+    reason,
+  });
+  if (error) return res.redirect(`/reconciliations/${id}?warning=${encodeURIComponent(error)}`);
+  const closing = to === 'resolved' || to === 'written_off';
+  await query(
+    `UPDATE reconciliations
+     SET case_status = $2,
+         reason_code = CASE WHEN $2 IN ('resolved', 'written_off') THEN $3 ELSE reason_code END,
+         assignee_id = COALESCE($4, assignee_id),
+         closed_by = CASE WHEN $5 THEN $6 ELSE closed_by END,
+         closed_at = CASE WHEN $5 THEN CURRENT_TIMESTAMP ELSE closed_at END
+     WHERE reconciliation_id = $1`,
+    [id, to, reason || null, assignee, closing, req.user.user_id]
+  );
+  await recordChange(req, {
+    action: closing ? 'approve' : 'update',
+    entity: 'variance case',
+    entityId: id,
+    before: { case_status: found.rows[0].case_status },
+    after: { case_status: to, reason_code: reason || null },
+  });
+  res.redirect(`/reconciliations/${id}?notice=Case updated.`);
 }));
 
 module.exports = router;
