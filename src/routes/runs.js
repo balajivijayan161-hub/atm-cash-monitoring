@@ -1,11 +1,15 @@
 const express = require('express');
 const { query, withTransaction } = require('../db');
 const { asyncRoute, renderPage, intOrNull, isIsoDate, pageWindow } = require('../http');
+const { requireCan, requireAny, deny } = require('../auth/gate');
+const { can } = require('../auth/permissions');
+const { recordChange } = require('../auth/activity');
 const { loadReference } = require('../services/reference');
 const { saveRun } = require('../services/runs');
 const { totalLoaded } = require('../../public/js/money');
 
 const router = express.Router();
+router.use(requireCan('runs'));
 const STATUSES = ['planned', 'in_progress', 'completed', 'cancelled'];
 const PAGE_SIZE = 20;
 
@@ -63,7 +67,7 @@ router.get('/runs', asyncRoute(async (req, res) => {
   });
 }));
 
-router.post('/runs/plan', asyncRoute(async (req, res) => {
+router.post('/runs/plan', requireCan('planRuns'), asyncRoute(async (req, res) => {
   const plannedDate = req.body.planned_date;
   const rawLocation = req.body.location_id;
   const locationId = intOrNull(rawLocation);
@@ -100,7 +104,7 @@ router.post('/runs/plan', asyncRoute(async (req, res) => {
   res.redirect(`/runs?${params.toString()}`);
 }));
 
-router.get('/runs/new', asyncRoute(async (req, res) => {
+router.get('/runs/new', requireCan('createRun'), asyncRoute(async (req, res) => {
   const [ref, dates] = await Promise.all([
     loadReference(),
     query(`SELECT (CURRENT_DATE + 1)::text AS tomorrow`),
@@ -124,7 +128,7 @@ router.get('/runs/new', asyncRoute(async (req, res) => {
   });
 }));
 
-router.post('/runs', asyncRoute(async (req, res) => {
+router.post('/runs', requireCan('createRun'), asyncRoute(async (req, res) => {
   const saved = await withTransaction((client) => saveRun(client, req.body, null));
   if (saved.errors) {
     const ref = await loadReference();
@@ -140,6 +144,16 @@ router.post('/runs', asyncRoute(async (req, res) => {
       statusCode: 400,
     });
   }
+  if (!can(req.user, 'approveRuns')) {
+    await query(`UPDATE replenishment_runs SET approval_status = 'pending' WHERE run_id = $1`, [saved.runId]);
+  }
+  await recordChange(req, {
+    action: 'create',
+    entity: 'replenishment run',
+    entityId: saved.runId,
+    before: null,
+    after: { status: req.body.status || 'planned', total: saved.total },
+  });
   res.redirect(`/runs/${saved.runId}?notice=${encodeURIComponent('Run saved. Total loaded ' + saved.total + '.')}`);
 }));
 
@@ -192,9 +206,13 @@ router.get('/runs/:id', asyncRoute(async (req, res, next) => {
   });
 }));
 
-router.post('/runs/:id', asyncRoute(async (req, res) => {
+router.post('/runs/:id', requireAny('editRun', 'editOwnRun'), asyncRoute(async (req, res) => {
   const id = intOrNull(req.params.id);
   if (!id) return renderPage(req, res, 'not-found', { title: 'Run Not Found', statusCode: 404 });
+  if (req.user.role === 'custodian') {
+    const owned = await query('SELECT 1 FROM replenishment_runs WHERE run_id = $1 AND custodian_id = $2', [id, req.user.custodian_id]);
+    if (!owned.rowCount) return deny(req, res);
+  }
   const saved = await withTransaction((client) => saveRun(client, req.body, id));
   if (saved.errors) {
     const ref = await loadReference();
@@ -213,11 +231,18 @@ router.post('/runs/:id', asyncRoute(async (req, res) => {
   res.redirect(`/runs/${id}?notice=${encodeURIComponent('Run updated. Total loaded ' + saved.total + '.')}`);
 }));
 
-router.post('/runs/:id/delete', asyncRoute(async (req, res) => {
+router.post('/runs/:id/delete', requireCan('deleteRun'), asyncRoute(async (req, res) => {
   const id = intOrNull(req.params.id);
   if (!id) return res.redirect('/runs?warning=That run was not found.');
   const deleted = await query('DELETE FROM replenishment_runs WHERE run_id = $1', [id]);
   if (!deleted.rowCount) return res.redirect('/runs?warning=That run was not found.');
+  await recordChange(req, {
+    action: 'delete',
+    entity: 'replenishment run',
+    entityId: id,
+    before: { run_id: id },
+    after: null,
+  });
   res.redirect('/runs?notice=Replenishment run deleted.');
 }));
 

@@ -1,0 +1,44 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Access</p>
+    <h1><%= editing ? 'Edit User' : 'New User' %></h1>
+  </div>
+</header>
+<% if (errors.length) { %><div class="errors" role="alert"><ul><% errors.forEach((item) => { %><li><%= item %></li><% }) %></ul></div><% } %>
+<form method="post" action="<%= editing ? '/users/' + editing.user_id : '/users' %>">
+  <%- csrfField %>
+  <div class="form-grid">
+    <% if (!editing) { %>
+      <label class="field">Username
+        <input name="username" value="<%= form.username %>" autocomplete="off" required>
+      </label>
+    <% } %>
+    <label class="field">Full Name
+      <input name="full_name" value="<%= form.full_name %>" required>
+    </label>
+    <label class="field">Role
+      <select name="role">
+        <% roles.forEach((role) => { %>
+          <option value="<%= role %>" <%= form.role === role ? 'selected' : '' %>><%= roleLabel(role) %></option>
+        <% }) %>
+      </select>
+    </label>
+    <label class="field">Region
+      <input name="region" value="<%= form.region || '' %>" placeholder="West">
+    </label>
+    <label class="field">Branch Number
+      <input name="branch_id" value="<%= form.branch_id || '' %>">
+    </label>
+    <label class="field">Custodian Number
+      <input name="custodian_id" value="<%= form.custodian_id || '' %>">
+    </label>
+    <label class="field">Engineer Number
+      <input name="engineer_id" value="<%= form.engineer_id || '' %>">
+    </label>
+    <label class="field"><%= editing ? 'New Password' : 'Password' %>
+      <input name="password" type="password" autocomplete="new-password" <%= editing ? '' : 'required' %>>
+    </label>
+    <label class="check"><input type="checkbox" name="active" <%= form.active ? 'checked' : '' %>> Active</label>
+  </div>
+  <button class="btn btn-primary" type="submit"><%= editing ? 'Save User' : 'Create User' %></button>
+</form>

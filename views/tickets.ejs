@@ -45,7 +45,8 @@
           <td data-label="Engineer"><%= row.engineer_name || '—' %></td>
           <td data-label="Assign">
             <% if (row.status !== 'closed') { %>
-              <form method="post" action="/tickets/<%= row.ticket_id %>/assign">
+              <% if (can.assignTickets) { %><form method="post" action="/tickets/<%= row.ticket_id %>/assign">
+                <%- csrfField %>
                 <select name="engineer_id" aria-label="Engineer for <%= row.ticket_no %>">
                   <option value="">Engineer</option>
                   <% engineers.forEach((eng) => { %>
@@ -53,12 +54,13 @@
                   <% }) %>
                 </select>
                 <button class="btn" type="submit">Assign</button>
-              </form>
+              </form><% } %>
             <% } else { %>—<% } %>
           </td>
           <td data-label="Close">
             <% if (row.status !== 'closed') { %>
               <form method="post" action="/tickets/<%= row.ticket_id %>/close">
+                <%- csrfField %>
                 <input name="resolution" placeholder="Resolution" aria-label="Resolution for <%= row.ticket_no %>">
                 <button class="btn" type="submit">Close</button>
               </form>

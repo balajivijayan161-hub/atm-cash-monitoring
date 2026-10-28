@@ -1,8 +1,11 @@
 const express = require('express');
 const { query, withTransaction } = require('../db');
 const { asyncRoute, renderPage, intOrNull, isIsoDate, inr, parseLedgerAmount, ledgerAmountError } = require('../http');
+const { requireCan } = require('../auth/gate');
+const { recordChange } = require('../auth/activity');
 
 const router = express.Router();
+router.use(requireCan('recons'));
 
 router.get('/reconciliations', asyncRoute(async (req, res) => {
   const rows = await query(
@@ -49,7 +52,7 @@ router.get('/reconciliations/new', asyncRoute(async (req, res) => {
   });
 }));
 
-router.post('/reconciliations', asyncRoute(async (req, res) => {
+router.post('/reconciliations', requireCan('createRecon'), asyncRoute(async (req, res) => {
   const atmId = intOrNull(req.body.atm_id);
   const runText = req.body.run_id == null ? '' : String(req.body.run_id).trim();
   const runId = intOrNull(req.body.run_id);
@@ -120,9 +123,20 @@ router.post('/reconciliations', asyncRoute(async (req, res) => {
       `SELECT ticket_id, ticket_no FROM fault_tickets WHERE reconciliation_id = $1`,
       [inserted.rows[0].reconciliation_id]
     );
-    return { difference: inserted.rows[0].difference, ticket: ticket.rows[0] || null };
+    return {
+      reconciliationId: inserted.rows[0].reconciliation_id,
+      difference: inserted.rows[0].difference,
+      ticket: ticket.rows[0] || null,
+    };
   });
 
+  await recordChange(req, {
+    action: 'create',
+    entity: 'reconciliation',
+    entityId: saved.reconciliationId,
+    before: null,
+    after: { atm_id: atmId, difference: saved.difference },
+  });
   if (saved.ticket) {
     const notice = `Counted cash did not match. ${saved.ticket.ticket_no} was raised automatically for a difference of ${inr(saved.difference)}.`;
     return res.redirect(`/tickets?notice=${encodeURIComponent(notice)}`);

@@ -1,8 +1,10 @@
 const express = require('express');
 const { asyncRoute } = require('../http');
 const { getSimulatorStatus, startSimulator, stopSimulator } = require('../services/simulator');
+const { requireCan } = require('../auth/gate');
 
 const router = express.Router();
+router.use(requireCan('liveFeed'));
 
 router.get('/live-feed/status', asyncRoute(async (req, res) => {
   res.json(getSimulatorStatus());

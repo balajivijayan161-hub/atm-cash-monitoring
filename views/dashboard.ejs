@@ -4,10 +4,11 @@
     <h1>Fleet Uptime</h1>
     <p class="lede">Availability, cash-out pressure, and how weekend withdrawals sit against the cash still in the machines.</p>
   </div>
-  <form method="post" action="<%= simulator.running ? '/live-feed/stop' : '/live-feed/start' %>">
+  <% if (can.liveFeed) { %><form method="post" action="<%= simulator.running ? '/live-feed/stop' : '/live-feed/start' %>">
+    <%- csrfField %>
     <button class="btn <%= simulator.running ? 'btn-danger' : 'btn-primary' %>" type="submit"><%= simulator.running ? 'Stop Live Feed' : 'Live Feed' %></button>
     <% if (simulator.running) { %><p class="hint">The live feed is on and stops itself after 15 minutes.</p><% } %>
-  </form>
+  </form><% } %>
 </header>
 
 <section class="section">
@@ -28,6 +29,24 @@
       </tbody>
     </table>
   </div>
+  <% if (cashouts.length) { %>
+    <h3 style="margin-top:18px">Likely Cash-Out Within 24 Hours</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ATM</th><th class="num">Cash</th><th class="num">Tomorrow's Forecast</th><th class="num">Hours Left</th></tr></thead>
+        <tbody>
+          <% cashouts.forEach((row) => { %>
+            <tr>
+              <td><a href="/atms/<%= row.atm_id %>"><%= row.atm_code %></a></td>
+              <td class="num"><%= inr(row.current_cash) %></td>
+              <td class="num"><%= inr(row.forecast) %></td>
+              <td class="num"><%= row.hours %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
   <% if (alertTotal > alerts.length) { %>
     <p class="hint" style="margin-top:8px"><a href="/alerts">+<%= alertTotal - alerts.length %> more</a></p>
   <% } %>

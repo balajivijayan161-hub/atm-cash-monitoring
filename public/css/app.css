@@ -46,6 +46,8 @@ p { margin: 0; }
   top: 0;
   height: 100vh;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
 }
 .brand { display: flex; gap: 10px; align-items: center; padding: 0 8px 18px; }
 .mark {
@@ -287,6 +289,19 @@ pre.script {
   .ticket-table input { flex: 1 1 9rem; min-width: 0; width: auto; max-width: 100%; }
   .ticket-table .btn { flex: 1 1 auto; justify-content: center; }
 }
+.user-chip { margin-top: auto; padding: 12px 8px 4px; color: var(--sidebar-text); font-size: 13px; }
+.user-chip strong, .user-chip span { display: block; }
+.user-chip span { color: var(--sidebar-dim); margin-bottom: 8px; }
+.user-chip .btn { width: 100%; }
+.login-body { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+.login-card { width: min(420px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 28px 22px; box-shadow: var(--shadow); }
+.login-brand { display: flex; gap: 12px; align-items: center; margin-bottom: 18px; }
+.login-brand strong { display: block; font-family: var(--serif); font-size: 22px; }
+.login-brand span, .password-row { color: var(--muted); }
+.password-row { display: flex; gap: 8px; }
+.password-row input { flex: 1; }
+.login-submit { width: 100%; margin-top: 8px; }
+
 @media print {
   .sidebar, .demo-banner, .filters, .actions, .colophon { display: none !important; }
   .shell { display: block; }

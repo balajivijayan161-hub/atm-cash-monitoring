@@ -34,3 +34,9 @@ services:
         value: "4000"
       - key: SIMULATOR_MAX_MS
         value: "900000"
+      - key: SESSION_SECRET
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: DEMO_PASSWORD
+        sync: false

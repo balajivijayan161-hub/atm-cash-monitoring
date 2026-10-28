@@ -11,6 +11,7 @@
   </div>
 <% } %>
 <form id="run-form" method="post" action="<%= action %>">
+  <%- csrfField %>
   <div class="form-grid">
     <label class="field">Run date
       <input type="date" name="planned_date" value="<%= form.planned_date %>" required>
@@ -101,9 +102,10 @@
   </div>
 </form>
 <% if (run) { %>
-  <form method="post" action="/runs/<%= run.run_id %>/delete" style="margin-top:16px" onsubmit="return confirm('Delete this run and its cassette loads?');">
+  <% if (can.deleteRun) { %><form method="post" action="/runs/<%= run.run_id %>/delete" style="margin-top:16px" onsubmit="return confirm('Delete this run and its cassette loads?');">
+    <%- csrfField %>
     <button class="btn btn-danger" type="submit">Delete Run</button>
-  </form>
+  </form><% } %>
 <% } %>
 <template id="load-row-template">
   <tr>

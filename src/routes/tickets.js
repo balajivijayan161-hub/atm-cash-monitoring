@@ -1,8 +1,11 @@
 const express = require('express');
 const { query } = require('../db');
 const { asyncRoute, renderPage, intOrNull, pageWindow } = require('../http');
+const { requireCan } = require('../auth/gate');
+const { recordChange } = require('../auth/activity');
 
 const router = express.Router();
+router.use(requireCan('tickets'));
 const PAGE_SIZE = 80;
 const STATUSES = ['open', 'assigned', 'closed'];
 const CATEGORIES = ['cash_variance', 'cash_out', 'hardware', 'communication', 'cassette_error'];
@@ -53,7 +56,7 @@ router.get('/tickets', asyncRoute(async (req, res) => {
   });
 }));
 
-router.post('/tickets/:id/assign', asyncRoute(async (req, res) => {
+router.post('/tickets/:id/assign', requireCan('assignTickets'), asyncRoute(async (req, res) => {
   const id = intOrNull(req.params.id);
   const engineerId = intOrNull(req.body.engineer_id);
   if (!id) return res.redirect('/tickets?warning=Ticket not found.');
@@ -76,6 +79,13 @@ router.post('/tickets/:id/assign', asyncRoute(async (req, res) => {
     [id, engineerId]
   );
   if (!result.rowCount) return res.redirect('/tickets?warning=That ticket is already closed.');
+  await recordChange(req, {
+    action: 'update',
+    entity: 'fault ticket',
+    entityId: id,
+    before: { status: ticket.rows[0].status },
+    after: { status: 'assigned', engineer_id: engineerId },
+  });
   res.redirect(`/tickets?notice=${encodeURIComponent(result.rows[0].ticket_no + ' assigned.')}`);
 }));
 
@@ -96,6 +106,13 @@ router.post('/tickets/:id/close', asyncRoute(async (req, res) => {
     [id, resolution]
   );
   if (!result.rowCount) return res.redirect('/tickets?warning=That ticket is already closed.');
+  await recordChange(req, {
+    action: 'update',
+    entity: 'fault ticket',
+    entityId: id,
+    before: { status: ticket.rows[0].status },
+    after: { status: 'closed', resolution: resolution || null },
+  });
   res.redirect(`/tickets?notice=${encodeURIComponent(result.rows[0].ticket_no + ' closed.')}`);
 }));
 

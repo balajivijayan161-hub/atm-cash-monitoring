@@ -1,9 +1,11 @@
 const express = require('express');
 const { query } = require('../db');
 const { asyncRoute, renderPage, intOrNull, isIsoDate } = require('../http');
+const { requireCan } = require('../auth/gate');
 const { loadReference } = require('../services/reference');
 
 const router = express.Router();
+router.use(requireCan('forecast'));
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 function weekdayName(iso) {

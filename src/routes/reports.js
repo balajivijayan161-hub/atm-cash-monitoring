@@ -1,9 +1,12 @@
 const express = require('express');
 const { query } = require('../db');
 const { asyncRoute, renderPage, intOrNull } = require('../http');
+const { requireCan } = require('../auth/gate');
+const { scopeBinds, atmScopeSql } = require('../auth/permissions');
 const { lastEightWeeks } = require('../lib/windows');
 
 const router = express.Router();
+router.use(requireCan('reports'));
 const WEEKDAY_KEYS = [
   ['mon', 1],
   ['tue', 2],
@@ -18,7 +21,8 @@ router.get('/reports/downtime-atms', asyncRoute(async (req, res) => {
   const [rows, bounds] = await Promise.all([
     query(`SELECT *
            FROM v_atm_downtime_above_5pct
-           ORDER BY downtime_pct DESC, atm_code`),
+           WHERE atm_id IN (${atmScopeSql(1)})
+           ORDER BY downtime_pct DESC, atm_code`, scopeBinds(req.user)),
     query(`SELECT date_trunc('month', CURRENT_TIMESTAMP) AS month_start, CURRENT_TIMESTAMP AS period_end`),
   ]);
   renderPage(req, res, 'report-downtime-atms', {
@@ -30,8 +34,15 @@ router.get('/reports/downtime-atms', asyncRoute(async (req, res) => {
 }));
 
 router.get('/reports/van-cashouts', asyncRoute(async (req, res) => {
+  const [region, branchId, custodianId, engineerId] = scopeBinds(req.user);
   const rows = await query(
-    `SELECT * FROM v_van_cashout_incidents ORDER BY cashout_incidents DESC, van_code`
+    `SELECT * FROM v_van_cashout_incidents
+     WHERE ($1::text IS NULL OR location_id IN (SELECT location_id FROM locations WHERE region = $1))
+       AND ($2::int IS NULL OR location_id = (SELECT location_id FROM branches WHERE branch_id = $2))
+       AND ($3::int IS NULL)
+       AND ($4::int IS NULL)
+     ORDER BY cashout_incidents DESC, van_code`,
+    [region, branchId, custodianId, engineerId]
   );
   const max = rows.rows.reduce((top, row) => Math.max(top, Number(row.cashout_incidents) || 0), 0);
   renderPage(req, res, 'report-van-cashouts', { title: 'Van Cash-Outs', rows: rows.rows, max });

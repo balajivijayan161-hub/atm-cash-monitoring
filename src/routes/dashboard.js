@@ -1,13 +1,16 @@
 const express = require('express');
 const { query } = require('../db');
 const { asyncRoute, renderPage } = require('../http');
+const { requireCan } = require('../auth/gate');
+const { scopeBinds, atmScopeSql } = require('../auth/permissions');
 const { lastEightWeeks } = require('../lib/windows');
 const { getSimulatorStatus } = require('../services/simulator');
+const { hoursToEmpty, runsOutWithinDay } = require('../services/cashout');
 
 const router = express.Router();
 
-router.get('/', asyncRoute(async (req, res) => {
-  const [fleet, tickets, runs, dispensed, byLocation, byDay, byWeekday, worst, recentTickets, alerts, alertCount, downtimeOpen, downtimeCount] = await Promise.all([
+router.get('/', requireCan('dashboard'), asyncRoute(async (req, res) => {
+  const [fleet, tickets, runs, dispensed, byLocation, byDay, byWeekday, worst, recentTickets, alerts, alertCount, downtimeOpen, downtimeCount, cashoutRows] = await Promise.all([
     query(`SELECT
              COUNT(*)::int AS atms,
              ROUND(AVG(downtime_pct)::numeric, 2) AS avg_downtime_pct,
@@ -113,6 +116,14 @@ router.get('/', asyncRoute(async (req, res) => {
            ORDER BY d.started_at DESC
            LIMIT 6`),
     query(`SELECT COUNT(*)::int AS n FROM downtime_log WHERE ended_at IS NULL`),
+    query(
+      `SELECT a.atm_id, a.atm_code, a.site_name, a.current_cash,
+              forecast_cash(a.atm_id, CURRENT_DATE + 1) AS forecast
+       FROM atms a
+       WHERE a.status <> 'decommissioned'
+         AND a.atm_id IN (${atmScopeSql(1)})`,
+      scopeBinds(req.user)
+    ),
   ]);
 
   const fleetRow = fleet.rows[0] || {};
@@ -136,6 +147,11 @@ router.get('/', asyncRoute(async (req, res) => {
     alertTotal: alertCount.rows[0].n,
     downtimeOpen: downtimeOpen.rows,
     downtimeTotal: downtimeCount.rows[0].n,
+    cashouts: cashoutRows.rows
+      .map((row) => ({ ...row, hours: hoursToEmpty(row.current_cash, row.forecast) }))
+      .filter((row) => runsOutWithinDay(row.hours))
+      .sort((a, b) => a.hours - b.hours)
+      .slice(0, 8),
     simulator: getSimulatorStatus(),
     charts: {
       locations: byLocation.rows.map((row) => row.location_name),

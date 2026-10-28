@@ -5,11 +5,12 @@
     <p class="lede">The planner selects ATMs whose forecast exceeds cash still in the machine, groups them by location, and assigns a van and custodian. Each run holds the cassette loads for that trip.</p>
   </div>
   <div class="actions">
-    <a class="btn btn-primary" href="/runs/new">New Run</a>
+    <% if (can.createRun) { %><a class="btn btn-primary" href="/runs/new">New Run</a><% } %>
   </div>
 </header>
 
-<form class="card filters" method="post" action="/runs/plan" style="padding:14px; margin-bottom:14px;">
+<% if (can.planRuns) { %><form class="card filters" method="post" action="/runs/plan" style="padding:14px; margin-bottom:14px;">
+  <%- csrfField %>
   <label class="field">Plan date
     <input type="date" name="planned_date" value="<%= tomorrow %>" required>
   </label>
@@ -23,7 +24,7 @@
   </label>
   <button class="btn btn-primary" type="submit">Plan Routes</button>
   <p class="hint" style="flex-basis:100%">Planning the same date again will not add an ATM that is already on a run.</p>
-</form>
+</form><% } %>
 
 <% if (plans.length) { %>
   <p class="hint" style="margin-bottom:12px">Latest planner results:

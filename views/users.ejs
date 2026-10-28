@@ -1,0 +1,25 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Access</p>
+    <h1>User Accounts</h1>
+    <p class="lede">Create accounts, change roles, and disable sign-in.</p>
+  </div>
+  <a class="btn btn-primary" href="/users/new">New User</a>
+</header>
+<div class="table-wrap">
+  <table class="stack-rows">
+    <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Region</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      <% rows.forEach((row) => { %>
+        <tr>
+          <td data-label="Name"><%= row.full_name %></td>
+          <td data-label="Username"><%= row.username %></td>
+          <td data-label="Role"><%= roleLabel(row.role) %></td>
+          <td data-label="Region"><%= row.region || 'All Regions' %></td>
+          <td data-label="Status"><%= row.active ? 'Active' : 'Disabled' %></td>
+          <td data-label="Edit"><a href="/users/<%= row.user_id %>">Edit</a></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>

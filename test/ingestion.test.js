@@ -11,18 +11,22 @@ const { rowUpdatesCurrentState, closeLiveFeedDowntime } = require('../src/servic
 const { ingestTracked, scanInboundOnce, classifyIngestResult } = require('../src/services/inboundPoller');
 const { runSimulatorTick, shouldAutoStop } = require('../src/services/simulator');
 const { applySchema } = require('../src/db');
-const { ensureSchema, withRollback, makeAtm, pool } = require('./helpers');
+const { ensureUsers, withRollback, makeAtm, pool, createAgent } = require('./helpers');
 
 let server;
 let base;
+let agent;
 
 before(async () => {
-  await ensureSchema();
+  await ensureUsers();
   const app = createApp();
   await new Promise((resolve) => {
     server = app.listen(0, '127.0.0.1', resolve);
   });
   base = `http://127.0.0.1:${server.address().port}`;
+  agent = createAgent(base);
+  const logged = await agent.login();
+  if (logged.status !== 302) throw new Error(`sign-in failed: ${logged.status} ${logged.text.slice(0, 180)}`);
 });
 
 after(async () => {
@@ -519,24 +523,24 @@ test('the inbound folder parks a new file and a repeat, and rejects an empty fil
 });
 
 test('pages no longer describe the ledger as synthetic and imports are linked', async () => {
-  const home = await fetch(`${base}/`);
-  const homeHtml = await home.text();
+  const home = await agent.get('/');
+  const homeHtml = home.text;
   assert.equal(home.status, 200);
   assert.match(homeHtml, />Live Feed</);
   assert.doesNotMatch(homeHtml, /simulator/i);
   assert.match(homeHtml, /Cash Alerts/);
   assert.match(homeHtml, /href="\/imports"/);
   assert.doesNotMatch(homeHtml, /synthetic|Demo data|sample data|fake data/i);
-  const imports = await fetch(`${base}/imports`);
+  const imports = await agent.get('/imports');
   assert.equal(imports.status, 200);
-  const importsHtml = await imports.text();
+  const importsHtml = imports.text;
   assert.match(importsHtml, /Received \(IST\)/);
   assert.doesNotMatch(importsHtml, /synthetic|Demo data|sample data/i);
   assert.doesNotMatch(importsHtml, /simulator-|\.csv/i);
 
   async function paged(path) {
-    const response = await fetch(`${base}${path}`);
-    const html = await response.text();
+    const response = await agent.get(path);
+    const html = response.text;
     assert.equal(response.status, 200, html.slice(0, 300));
     const match = html.match(/Page (\d+) of (\d+)/);
     if (match) {

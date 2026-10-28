@@ -22,28 +22,37 @@
       </div>
       <p class="nav-label">Monitor</p>
       <nav class="nav" aria-label="Primary">
-        <a class="<%= navClass('/') %>" href="/"<% if (navClass('/')) { %> aria-current="page"<% } %>>Uptime Dashboard</a>
-        <a class="<%= navClass('/atms') %>" href="/atms"<% if (navClass('/atms')) { %> aria-current="page"<% } %>>ATMs</a>
-        <a class="<%= navClass('/tickets') %>" href="/tickets"<% if (navClass('/tickets')) { %> aria-current="page"<% } %>>Fault Tickets</a>
-        <a class="<%= navClass('/alerts') %>" href="/alerts"<% if (navClass('/alerts')) { %> aria-current="page"<% } %>>Cash Alerts</a>
-        <a class="<%= navClass('/downtime') %>" href="/downtime"<% if (navClass('/downtime')) { %> aria-current="page"<% } %>>Open Downtime</a>
+        <% if (can.dashboard) { %><a class="<%= navClass('/') %>" href="/"<% if (navClass('/')) { %> aria-current="page"<% } %>>Uptime Dashboard</a><% } %>
+        <% if (can.atms) { %><a class="<%= navClass('/atms') %>" href="/atms"<% if (navClass('/atms')) { %> aria-current="page"<% } %>>ATMs</a><% } %>
+        <% if (can.tickets) { %><a class="<%= navClass('/tickets') %>" href="/tickets"<% if (navClass('/tickets')) { %> aria-current="page"<% } %>>Fault Tickets</a><% } %>
+        <% if (can.alerts) { %><a class="<%= navClass('/alerts') %>" href="/alerts"<% if (navClass('/alerts')) { %> aria-current="page"<% } %>>Cash Alerts</a><% } %>
+        <% if (can.downtime) { %><a class="<%= navClass('/downtime') %>" href="/downtime"<% if (navClass('/downtime')) { %> aria-current="page"<% } %>>Open Downtime</a><% } %>
       </nav>
       <p class="nav-label">Cash</p>
       <nav class="nav" aria-label="Cash">
-        <a class="<%= navClass('/forecast') %>" href="/forecast"<% if (navClass('/forecast')) { %> aria-current="page"<% } %>>Cash Forecast</a>
-        <a class="<%= navClass('/runs') %>" href="/runs"<% if (navClass('/runs')) { %> aria-current="page"<% } %>>Replenishment Runs</a>
-        <a class="<%= navClass('/reconciliations') %>" href="/reconciliations"<% if (navClass('/reconciliations')) { %> aria-current="page"<% } %>>Reconciliation</a>
-        <a class="<%= navClass('/switch') %>" href="/switch"<% if (navClass('/switch')) { %> aria-current="page"<% } %>>Bank Data Import</a>
-        <a class="<%= navClass('/imports') %>" href="/imports"<% if (navClass('/imports')) { %> aria-current="page"<% } %>>Import History</a>
+        <% if (can.forecast) { %><a class="<%= navClass('/forecast') %>" href="/forecast"<% if (navClass('/forecast')) { %> aria-current="page"<% } %>>Cash Forecast</a><% } %>
+        <% if (can.runs) { %><a class="<%= navClass('/runs') %>" href="/runs"<% if (navClass('/runs')) { %> aria-current="page"<% } %>>Replenishment Runs</a><% } %>
+        <% if (can.recons) { %><a class="<%= navClass('/reconciliations') %>" href="/reconciliations"<% if (navClass('/reconciliations')) { %> aria-current="page"<% } %>>Reconciliation</a><% } %>
+        <% if (can.importData) { %><a class="<%= navClass('/switch') %>" href="/switch"<% if (navClass('/switch')) { %> aria-current="page"<% } %>>Bank Data Import</a><% } %>
+        <% if (can.importData) { %><a class="<%= navClass('/imports') %>" href="/imports"<% if (navClass('/imports')) { %> aria-current="page"<% } %>>Import History</a><% } %>
       </nav>
-      <p class="nav-label">Reports</p>
+      <% if (can.reports || can.journals || can.manageUsers || can.activity) { %><p class="nav-label">Reports</p><% } %>
       <nav class="nav" aria-label="Reports">
-        <a class="<%= navClass('/reports/downtime-atms') %>" href="/reports/downtime-atms"<% if (navClass('/reports/downtime-atms')) { %> aria-current="page"<% } %>>Downtime Above 5%</a>
-        <a class="<%= navClass('/reports/van-cashouts') %>" href="/reports/van-cashouts"<% if (navClass('/reports/van-cashouts')) { %> aria-current="page"<% } %>>Van Cash-Outs</a>
-        <a class="<%= navClass('/reports/withdrawal-matrix') %>" href="/reports/withdrawal-matrix"<% if (navClass('/reports/withdrawal-matrix')) { %> aria-current="page"<% } %>>Withdrawal Matrix</a>
-        <a class="<%= navClass('/reports/downtime-by-location') %>" href="/reports/downtime-by-location"<% if (navClass('/reports/downtime-by-location')) { %> aria-current="page"<% } %>>Downtime by Location</a>
-        <a class="<%= navClass('/operations/ej-archive') %>" href="/operations/ej-archive"<% if (navClass('/operations/ej-archive')) { %> aria-current="page"<% } %>>Electronic Journal Archive</a>
+        <% if (can.reports) { %><a class="<%= navClass('/reports/downtime-atms') %>" href="/reports/downtime-atms"<% if (navClass('/reports/downtime-atms')) { %> aria-current="page"<% } %>>Downtime Above 5%</a><% } %>
+        <% if (can.reports) { %><a class="<%= navClass('/reports/van-cashouts') %>" href="/reports/van-cashouts"<% if (navClass('/reports/van-cashouts')) { %> aria-current="page"<% } %>>Van Cash-Outs</a><% } %>
+        <% if (can.reports) { %><a class="<%= navClass('/reports/withdrawal-matrix') %>" href="/reports/withdrawal-matrix"<% if (navClass('/reports/withdrawal-matrix')) { %> aria-current="page"<% } %>>Withdrawal Matrix</a><% } %>
+        <% if (can.reports) { %><a class="<%= navClass('/reports/downtime-by-location') %>" href="/reports/downtime-by-location"<% if (navClass('/reports/downtime-by-location')) { %> aria-current="page"<% } %>>Downtime by Location</a><% } %>
+        <% if (can.journals) { %><a class="<%= navClass('/operations/ej-archive') %>" href="/operations/ej-archive"<% if (navClass('/operations/ej-archive')) { %> aria-current="page"<% } %>>Electronic Journal Archive</a><% } %>
+        <% if (can.manageUsers) { %><a class="<%= navClass('/users') %>" href="/users"<% if (navClass('/users')) { %> aria-current="page"<% } %>>User Accounts</a><% } %>
+        <% if (can.activity) { %><a class="<%= navClass('/activity') %>" href="/activity"<% if (navClass('/activity')) { %> aria-current="page"<% } %>>Activity</a><% } %>
       </nav>
+      <% if (currentUser) { %>
+        <div class="user-chip">
+          <strong><%= currentUser.full_name %></strong>
+          <span><%= roleLabel(currentUser.role) %></span>
+          <form method="post" action="/logout"><%- csrfField %><button class="btn" type="submit">Log Out</button></form>
+        </div>
+      <% } %>
     </aside>
     <div class="content">
       <% if (notice) { %><p class="banner ok" role="status"><%= notice %></p><% } %>

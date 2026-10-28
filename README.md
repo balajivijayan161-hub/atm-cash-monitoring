@@ -2,7 +2,7 @@
 
 Operations ledger for a cash-management vendor that services 450 ATMs. It forecasts weekday cash need, plans replenishment runs onto vans and custodians, records cassette loads, reconciles counted cash, and tracks downtime and fault tickets.
 
-The deployment runs on sample data for demonstration. There is no authentication.
+The deployment runs on sample data for demonstration. Every page except sign-in and the health check requires a signed-in user.
 
 ## Local run
 
@@ -20,6 +20,8 @@ npm start
 The process listens on `PORT` (default **43123**). On first start against an empty database it applies `db/schema.sql` and loads the sample fleet. Open [http://127.0.0.1:43123](http://127.0.0.1:43123).
 
 `GET /health` returns JSON: `{ "status": "ok", "db": "up", "atms": 450, ... }`.
+
+Signed-in accounts are seeded on startup: `superadmin` uses `ADMIN_PASSWORD`; `regional.manager`, `branch.manager`, `clerk`, `custodian`, and `engineer` use `DEMO_PASSWORD`. Set `SESSION_SECRET` as well. On Render, set those three as secret environment variables (`sync: false` in `render.yaml`).
 
 Tests use the same `DATABASE_URL` and roll back their own rows:
 

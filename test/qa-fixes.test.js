@@ -4,22 +4,26 @@ const { createApp } = require('../src/app');
 const { intOrNull, parseLedgerAmount, ledgerAmountError } = require('../src/http');
 const { lastEightWeeks } = require('../src/lib/windows');
 const { saveRun } = require('../src/services/runs');
-const { ensureSchema, withRollback, makeAtm, pool } = require('./helpers');
+const { ensureUsers, withRollback, makeAtm, pool, createAgent } = require('./helpers');
 
 let server;
 let base;
+let agent;
 
 function code(prefix) {
   return `${prefix}${Math.random().toString(36).slice(2, 8)}`.toUpperCase().replace(/[^A-Z0-9]/g, 'X').slice(0, 14);
 }
 
 before(async () => {
-  await ensureSchema();
+  await ensureUsers();
   const app = createApp();
   await new Promise((resolve) => {
     server = app.listen(0, '127.0.0.1', resolve);
   });
   base = `http://127.0.0.1:${server.address().port}`;
+  agent = createAgent(base);
+  const logged = await agent.login();
+  if (logged.status !== 302) throw new Error(`sign-in failed: ${logged.status} ${logged.text.slice(0, 180)}`);
 });
 
 after(async () => {
@@ -27,15 +31,7 @@ after(async () => {
 });
 
 async function post(path, fields) {
-  const response = await fetch(`${base}${path}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams(fields),
-    redirect: 'manual',
-  });
-  const text = await response.text();
-  const location = decodeURIComponent(response.headers.get('location') || '');
-  return { status: response.status, text, location };
+  return agent.post(path, fields);
 }
 
 test('integer ids above the int4 range are rejected', () => {
@@ -257,11 +253,11 @@ test('oversized ids, money, dates, and missing rows are validation errors', asyn
   const missingRun = await pool.query('SELECT 1 FROM replenishment_runs WHERE run_id = 2147483647');
   assert.equal(missingRun.rowCount, 0);
 
-  const missingAtm = await fetch(`${base}/atms/99999999999`);
+  const missingAtm = await agent.get('/atms/99999999999');
   assert.equal(missingAtm.status, 404);
 
-  const forecast = await fetch(`${base}/forecast?atm_id=99999999999`);
-  const forecastText = await forecast.text();
+  const forecast = await agent.get('/forecast?atm_id=99999999999');
+  const forecastText = forecast.text;
   assert.equal(forecast.status, 200);
   assert.match(forecastText, /Choose an ATM/);
   assert.doesNotMatch(forecastText, /database may still be loading/);
@@ -354,20 +350,20 @@ test('oversized ids, money, dates, and missing rows are validation errors', asyn
 
   const maint = await pool.query(`SELECT van_code FROM cash_vans WHERE status = 'maintenance' LIMIT 1`);
   assert.ok(maint.rowCount > 0);
-  const runForm = await fetch(`${base}/runs/new`);
-  const runHtml = await runForm.text();
+  const runForm = await agent.get('/runs/new');
+  const runHtml = runForm.text;
   assert.equal(runForm.status, 200);
   assert.doesNotMatch(runHtml, new RegExp(maint.rows[0].van_code));
 
-  const cashouts = await fetch(`${base}/reports/van-cashouts`);
-  const cashoutHtml = await cashouts.text();
+  const cashouts = await agent.get('/reports/van-cashouts');
+  const cashoutHtml = cashouts.text;
   assert.match(cashoutHtml, /counted once, against the van that last serviced/);
 
-  const home = await fetch(`${base}/`);
-  const homeHtml = await home.text();
+  const home = await agent.get('/');
+  const homeHtml = home.text;
   const ticketLink = homeHtml.match(/href="\/tickets\?ticket=(\d+)#ticket-\1"/);
   assert.ok(ticketLink);
-  const focused = await fetch(`${base}/tickets?ticket=${ticketLink[1]}`);
-  const focusedHtml = await focused.text();
+  const focused = await agent.get(`/tickets?ticket=${ticketLink[1]}`);
+  const focusedHtml = focused.text;
   assert.match(focusedHtml, new RegExp(`id="ticket-${ticketLink[1]}" class="row-focus"`));
 });

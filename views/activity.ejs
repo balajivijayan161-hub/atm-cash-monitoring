@@ -1,0 +1,73 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Oversight</p>
+    <h1>Activity</h1>
+    <p class="lede">Sign-ins, pages opened, and changes. Times are India Standard Time, to the second.</p>
+  </div>
+  <a class="btn" href="/activity/export?user=<%= filters.userId || '' %>&role=<%= filters.role %>&kind=<%= filters.kind %>&from=<%= filters.from %>&to=<%= filters.to %>">Export</a>
+</header>
+<form class="filters" method="get" action="/activity">
+  <label class="field">User
+    <select name="user">
+      <option value="">Anyone</option>
+      <% users.forEach((person) => { %>
+        <option value="<%= person.user_id %>" <%= String(filters.userId) === String(person.user_id) ? 'selected' : '' %>><%= person.full_name %></option>
+      <% }) %>
+    </select>
+  </label>
+  <label class="field">Role
+    <select name="role">
+      <option value="">Any Role</option>
+      <% ['super_admin','regional_manager','branch_manager','clerk','custodian','engineer'].forEach((role) => { %>
+        <option value="<%= role %>" <%= filters.role === role ? 'selected' : '' %>><%= roleLabel(role) %></option>
+      <% }) %>
+    </select>
+  </label>
+  <label class="field">Type
+    <select name="kind">
+      <option value="">All Activity</option>
+      <option value="session" <%= filters.kind === 'session' ? 'selected' : '' %>>Sign-in History</option>
+      <option value="access" <%= filters.kind === 'access' ? 'selected' : '' %>>Pages Opened</option>
+      <option value="change" <%= filters.kind === 'change' ? 'selected' : '' %>>Changes</option>
+    </select>
+  </label>
+  <label class="field">From
+    <input type="date" name="from" value="<%= filters.from %>">
+  </label>
+  <label class="field">To
+    <input type="date" name="to" value="<%= filters.to %>">
+  </label>
+  <button class="btn" type="submit">Filter</button>
+</form>
+<div class="table-wrap">
+  <table class="stack-rows">
+    <thead><tr><th>Time (IST)</th><th>User</th><th>Role</th><th>Type</th><th>What Happened</th></tr></thead>
+    <tbody>
+      <% if (!rows.length) { %><tr><td colspan="5" class="empty">No activity in this range.</td></tr><% } %>
+      <% rows.forEach((row) => { %>
+        <tr>
+          <td data-label="Time (IST)"><%= exactDateTime(row.created_at) %></td>
+          <td data-label="User"><%= row.username %></td>
+          <td data-label="Role"><%= row.role ? roleLabel(row.role) : '—' %></td>
+          <td data-label="Type"><%= label(row.kind) %></td>
+          <td data-label="What Happened">
+            <%= label(row.action) %><% if (row.entity) { %> · <%= label(row.entity) %> <%= row.entity_id || '' %><% } %>
+            <% if (row.summary && row.kind === 'access') { %><br><span class="hint"><%= row.summary %></span><% } %>
+            <% if (row.kind === 'change' && row.changes) { %>
+              <% (Array.isArray(row.changes) ? row.changes : []).forEach((change) => { %>
+                <br><span class="hint"><%= label(change.field) %>: <%= change.before == null ? '—' : change.before %> → <%= change.after == null ? '—' : change.after %></span>
+              <% }) %>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% if (pages > 1) { %>
+  <nav class="pager">
+    <% if (page > 1) { %><a href="<%= pageHref('/activity', filters, page - 1) %>">Previous</a><% } %>
+    <span>Page <%= page %> of <%= pages %></span>
+    <% if (page < pages) { %><a href="<%= pageHref('/activity', filters, page + 1) %>">Next</a><% } %>
+  </nav>
+<% } %>

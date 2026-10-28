@@ -1,4 +1,9 @@
 const { pool, ensureSchema } = require('../src/db');
+const { seedAccessUsers } = require('../src/auth/accounts');
+
+if (!process.env.SESSION_SECRET) process.env.SESSION_SECRET = 'test-session-secret';
+if (!process.env.ADMIN_PASSWORD) process.env.ADMIN_PASSWORD = 'test-admin-pass';
+if (!process.env.DEMO_PASSWORD) process.env.DEMO_PASSWORD = 'test-demo-pass';
 
 let sequence = 0;
 
@@ -52,4 +57,49 @@ async function makeAtm(client, { code, cash = 100000, capacity = 2000000, status
   };
 }
 
-module.exports = { ensureSchema, withRollback, makeAtm, pool };
+async function ensureUsers() {
+  await ensureSchema();
+  await seedAccessUsers();
+}
+
+function absorbCookies(jar, response) {
+  const lines = typeof response.headers.getSetCookie === 'function' ? response.headers.getSetCookie() : [];
+  for (const line of lines) {
+    const pair = line.split(';')[0];
+    const eq = pair.indexOf('=');
+    if (eq > 0) jar.set(pair.slice(0, eq), pair);
+  }
+}
+
+function createAgent(base) {
+  const jar = new Map();
+  let csrf = '';
+  async function request(path, { method = 'GET', fields } = {}) {
+    const headers = { cookie: [...jar.values()].join('; ') };
+    let body;
+    if (method !== 'GET') {
+      headers['content-type'] = 'application/x-www-form-urlencoded';
+      body = new URLSearchParams({ ...(fields || {}), _csrf: csrf });
+    }
+    const response = await fetch(`${base}${path}`, { method, headers, body, redirect: 'manual' });
+    absorbCookies(jar, response);
+    const text = await response.text();
+    const token = text.match(/name="_csrf" value="([^"]+)"/);
+    if (token) csrf = token[1];
+    return {
+      status: response.status,
+      text,
+      location: decodeURIComponent(response.headers.get('location') || ''),
+    };
+  }
+  return {
+    get: (path) => request(path),
+    post: (path, fields) => request(path, { method: 'POST', fields }),
+    async login(username = 'superadmin', password = process.env.ADMIN_PASSWORD) {
+      await request('/login');
+      return request('/login', { method: 'POST', fields: { username, password } });
+    },
+  };
+}
+
+module.exports = { ensureSchema, ensureUsers, withRollback, makeAtm, pool, createAgent };

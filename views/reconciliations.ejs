@@ -4,7 +4,7 @@
     <h1>Reconciliations</h1>
     <p class="lede">A difference other than zero opens a fault ticket. A matched count does not.</p>
   </div>
-  <a class="btn btn-primary" href="/reconciliations/new">New Reconciliation</a>
+  <% if (can.createRecon) { %><a class="btn btn-primary" href="/reconciliations/new">New Reconciliation</a><% } %>
 </header>
 <div class="table-wrap">
   <table>

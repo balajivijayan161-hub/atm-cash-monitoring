@@ -1,6 +1,7 @@
 const path = require('path');
 const express = require('express');
 const { query } = require('./db');
+const { installAuth } = require('./auth/gate');
 const {
   asyncRoute,
   renderPage,
@@ -9,6 +10,7 @@ const {
   pct,
   prettyDate,
   prettyDateTime,
+  exactDateTime,
   pageHref,
   titleCase,
   sourceLabel,
@@ -27,6 +29,7 @@ function createApp() {
   app.locals.pct = pct;
   app.locals.prettyDate = prettyDate;
   app.locals.prettyDateTime = prettyDateTime;
+  app.locals.exactDateTime = exactDateTime;
   app.locals.pageHref = pageHref;
   app.locals.label = titleCase;
   app.locals.sourceLabel = sourceLabel;
@@ -53,6 +56,8 @@ function createApp() {
   app.use(express.static(path.join(__dirname, '..', 'public')));
   app.use('/vendor', express.static(path.join(__dirname, '..', 'node_modules', 'chart.js', 'dist')));
   app.use('/samples', express.static(path.join(__dirname, '..', 'samples'), { index: false }));
+
+  installAuth(app);
 
   app.get('/health', asyncRoute(async (req, res) => {
     try {
@@ -86,6 +91,8 @@ function createApp() {
   app.use(require('./routes/lists'));
   app.use(require('./routes/simulator'));
   app.use(require('./routes/operations'));
+  app.use(require('./routes/users'));
+  app.use(require('./routes/activity'));
 
   app.use((req, res) => {
     renderPage(req, res, 'not-found', { title: 'Page Not Found', statusCode: 404 });

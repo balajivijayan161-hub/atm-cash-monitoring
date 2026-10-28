@@ -9,6 +9,7 @@
   <div class="errors" role="alert"><ul><% errors.forEach((item) => { %><li><%= item %></li><% }) %></ul></div>
 <% } %>
 <form method="post" action="/reconciliations" id="recon-form">
+  <%- csrfField %>
   <div class="form-grid">
     <label class="field grow" style="grid-column: span 2;">ATM
       <select name="atm_id" required>

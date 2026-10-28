@@ -10,6 +10,7 @@
 <% } %>
 <section class="two-col">
   <form class="card" method="post" action="/switch" enctype="multipart/form-data">
+    <%- csrfField %>
     <h3>Load a Batch</h3>
     <label class="field">File
       <input type="file" name="file" accept=".csv,.txt,.dat,text/csv,text/plain">

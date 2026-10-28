@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign In · ATM Cash Operations</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="login-body">
+  <main class="login-card">
+    <div class="login-brand">
+      <div class="mark" aria-hidden="true">₹</div>
+      <div>
+        <strong>ATM Cash Operations</strong>
+        <span>Sign in to continue</span>
+      </div>
+    </div>
+    <% if (reason === 'expired') { %>
+      <p class="banner bad" role="status">Your session expired. Sign in again.</p>
+    <% } %>
+    <% if (error) { %>
+      <p class="banner bad" role="alert" id="login-error"><%= error %></p>
+    <% } %>
+    <form method="post" action="/login" id="login-form">
+      <%- csrfField %>
+      <label class="field" for="username">Username
+        <input id="username" name="username" autocomplete="username" required value="<%= username %>" autofocus>
+      </label>
+      <label class="field" for="password">Password
+        <span class="password-row">
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+          <button class="btn" type="button" id="show-password" aria-controls="password" aria-pressed="false">Show</button>
+        </span>
+      </label>
+      <button class="btn btn-primary login-submit" type="submit" id="login-submit">Sign In</button>
+    </form>
+  </main>
+  <script>
+    const password = document.getElementById('password');
+    const toggle = document.getElementById('show-password');
+    toggle.addEventListener('click', () => {
+      const show = password.type === 'password';
+      password.type = show ? 'text' : 'password';
+      toggle.textContent = show ? 'Hide' : 'Show';
+      toggle.setAttribute('aria-pressed', show ? 'true' : 'false');
+      password.focus();
+    });
+    document.getElementById('login-form').addEventListener('submit', () => {
+      const button = document.getElementById('login-submit');
+      button.disabled = true;
+      button.textContent = 'Signing In…';
+    });
+  </script>
+</body>
+</html>

@@ -3,8 +3,10 @@ const multer = require('multer');
 const { query, withTransaction } = require('../db');
 const { asyncRoute, renderPage, intOrNull, batchName } = require('../http');
 const { importSwitchContent } = require('../services/switchImport');
+const { requireCan, csrfOk, deny } = require('../auth/gate');
 
 const router = express.Router();
+router.use(requireCan('importData'));
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -32,8 +34,9 @@ router.get('/switch', asyncRoute(async (req, res) => {
 router.post('/switch', (req, res, next) => {
   upload.single('file')(req, res, (err) => {
     if (err) {
-      req.fileError = 'The file could not be read. The limit is 5 MB of CSV or fixed-width text.';
+      req.fileError = 'The file could not be read. The limit is 5 MB.';
     }
+    if (!csrfOk(req)) return deny(req, res);
     next();
   });
 }, asyncRoute(async (req, res) => {

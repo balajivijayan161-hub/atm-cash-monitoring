@@ -1,8 +1,11 @@
 const express = require('express');
 const { query } = require('../db');
 const { asyncRoute, renderPage, intOrNull, likePattern, pageWindow } = require('../http');
+const { scopeBinds, atmScopeSql } = require('../auth/permissions');
+const { requireCan, deny } = require('../auth/gate');
 
 const router = express.Router();
+router.use(requireCan('atms'));
 const STATUSES = ['active', 'cash_out', 'out_of_service', 'decommissioned'];
 const PAGE_SIZE = 25;
 
@@ -11,7 +14,7 @@ router.get('/atms', asyncRoute(async (req, res) => {
   const status = STATUSES.includes(req.query.status) ? req.query.status : '';
   const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 80) : '';
   const pattern = q ? likePattern(q) : null;
-  const filters = [locationId, status || null, pattern];
+  const filters = [locationId, status || null, pattern, ...scopeBinds(req.user)];
   const where = `
     WHERE ($1::int IS NULL OR l.location_id = $1)
       AND ($2::text IS NULL OR a.status = $2)
@@ -20,7 +23,8 @@ router.get('/atms', asyncRoute(async (req, res) => {
         OR a.atm_code ILIKE $3 ESCAPE '\\'
         OR a.site_name ILIKE $3 ESCAPE '\\'
         OR b.branch_name ILIKE $3 ESCAPE '\\'
-      )`;
+      )
+      AND a.atm_id IN (${atmScopeSql(4)})`;
   const [count, locations] = await Promise.all([
     query(
       `SELECT COUNT(*)::int AS total
@@ -43,7 +47,7 @@ router.get('/atms', asyncRoute(async (req, res) => {
      LEFT JOIN v_atm_downtime_mtd d ON d.atm_id = a.atm_id
      ${where}
      ORDER BY a.atm_code
-     LIMIT $4 OFFSET $5`,
+     LIMIT $8 OFFSET $9`,
     [...filters, window.pageSize, window.offset]
   );
   renderPage(req, res, 'atms', {
@@ -60,6 +64,13 @@ router.get('/atms', asyncRoute(async (req, res) => {
 router.get('/atms/:id', asyncRoute(async (req, res) => {
   const id = intOrNull(req.params.id);
   if (!id) return renderPage(req, res, 'not-found', { title: 'ATM Not Found', statusCode: 404 });
+  const exists = await query('SELECT 1 FROM atms WHERE atm_id = $1', [id]);
+  if (!exists.rowCount) return renderPage(req, res, 'not-found', { title: 'ATM Not Found', statusCode: 404 });
+  const allowed = await query(
+    `SELECT 1 FROM atms a WHERE a.atm_id = $1 AND a.atm_id IN (${atmScopeSql(2)})`,
+    [id, ...scopeBinds(req.user)]
+  );
+  if (!allowed.rowCount) return deny(req, res);
   const atm = await query(
     `SELECT a.*, b.branch_name, b.branch_code, b.address AS branch_address, b.ifsc_code,
             l.location_name, l.city, l.state, l.region, d.downtime_pct, d.downtime_minutes, d.elapsed_minutes

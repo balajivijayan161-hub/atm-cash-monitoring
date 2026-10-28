@@ -182,6 +182,23 @@ function pageNumber(page) {
   return parsed;
 }
 
+function exactDateTime(value) {
+  if (!value) return '—';
+  const dt = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(dt.getTime())) return '—';
+  const formatted = new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+    timeZone: 'Asia/Kolkata',
+  }).format(dt);
+  return `${formatted} IST`;
+}
+
 function pageWindow(page, pageSize, total) {
   const size = Math.max(1, Number(pageSize) || 1);
   const count = Math.max(0, Number(total) || 0);
@@ -216,6 +233,7 @@ module.exports = {
   pct,
   prettyDate,
   prettyDateTime,
+  exactDateTime,
   titleCase,
   sourceLabel,
   batchName,

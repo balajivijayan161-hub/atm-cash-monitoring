@@ -1,11 +1,12 @@
 const express = require('express');
 const { query } = require('../db');
 const { asyncRoute, renderPage, pageWindow } = require('../http');
+const { requireCan } = require('../auth/gate');
 
 const router = express.Router();
 const PAGE_SIZE = 80;
 
-router.get('/alerts', asyncRoute(async (req, res) => {
+router.get('/alerts', requireCan('alerts'), asyncRoute(async (req, res) => {
   const count = await query(`SELECT COUNT(*)::int AS total FROM replenishment_requests WHERE status = 'open'`);
   const window = pageWindow(req.query.page, PAGE_SIZE, count.rows[0].total);
   const rows = await query(
@@ -28,7 +29,7 @@ router.get('/alerts', asyncRoute(async (req, res) => {
   });
 }));
 
-router.get('/downtime', asyncRoute(async (req, res) => {
+router.get('/downtime', requireCan('downtime'), asyncRoute(async (req, res) => {
   const count = await query(`SELECT COUNT(*)::int AS total FROM downtime_log WHERE ended_at IS NULL`);
   const window = pageWindow(req.query.page, PAGE_SIZE, count.rows[0].total);
   const rows = await query(
