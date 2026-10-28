@@ -8,6 +8,12 @@ Operations ledger for a cash-management vendor that services 450 ATMs. It foreca
 
 The deployment runs on sample data for demonstration. Every page except sign-in and the health check requires a signed-in user.
 
+## Documentation
+
+- [Project Blueprint](docs/BLUEPRINT.md) — problem, scope, roles, modules, and the figures the app calculates
+- [Standard Operating Procedures](docs/SOP.md) — daily steps for each role, using the page and button names on screen
+- [Technical Document](docs/TECHNICAL.md) — stack, database, security, feeds, configuration, and tests
+
 ## Run locally
 
 Requirements: Node.js 18 or newer, and PostgreSQL 14 or newer.
