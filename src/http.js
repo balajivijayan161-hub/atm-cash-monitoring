@@ -148,13 +148,24 @@ function sourceLabel(value) {
   return titleCase(key);
 }
 
+function batchKind(batch) {
+  const filename = String(batch.filename || '');
+  if (batch.source === 'simulator' || /^simulator-/i.test(filename) || /^switch-feed-/i.test(filename)) {
+    return 'simulator';
+  }
+  if (batch.source === 'schedule') return 'schedule';
+  if (batch.source === 'manual' || !batch.source) return 'manual';
+  return 'other';
+}
+
 function batchName(batch) {
   if (!batch) return 'Feed Batch';
   const when = batch.uploaded_at ? `${prettyDateTime(batch.uploaded_at)} IST` : '';
-  if (batch.source === 'simulator') return when ? `Bank Feed — ${when}` : 'Bank Feed';
-  if (batch.source === 'schedule') return when ? `Scheduled Import — ${when}` : 'Scheduled Import';
-  if (batch.source === 'manual') return when ? `Manual Upload — ${when}` : 'Manual Upload';
-  return `Feed Batch #${batch.batch_id}`;
+  const kind = batchKind(batch);
+  if (kind === 'simulator') return when ? `Bank Feed — ${when}` : 'Bank Feed';
+  if (kind === 'schedule') return when ? `Scheduled Import — ${when}` : 'Scheduled Import';
+  if (kind === 'manual') return when ? `Manual Upload — ${when}` : 'Manual Upload';
+  return when ? `Feed Batch — ${when}` : (batch.batch_id ? `Feed Batch #${batch.batch_id}` : 'Feed Batch');
 }
 
 function formatLabel(value) {
@@ -163,11 +174,19 @@ function formatLabel(value) {
   return titleCase(value);
 }
 
+function pageNumber(page) {
+  const text = String(page ?? '').trim();
+  if (!/^[1-9]\d*$/.test(text)) return 1;
+  const parsed = Number(text);
+  if (!Number.isSafeInteger(parsed)) return 1;
+  return parsed;
+}
+
 function pageWindow(page, pageSize, total) {
   const size = Math.max(1, Number(pageSize) || 1);
   const count = Math.max(0, Number(total) || 0);
   const pages = Math.max(1, Math.ceil(count / size));
-  const current = Math.min(Math.max(1, Number(page) || 1), pages);
+  const current = Math.min(pageNumber(page), pages);
   return { page: current, pages, offset: (current - 1) * size, pageSize: size, total: count };
 }
 

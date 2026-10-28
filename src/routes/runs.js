@@ -1,6 +1,6 @@
 const express = require('express');
 const { query, withTransaction } = require('../db');
-const { asyncRoute, renderPage, intOrNull, isIsoDate } = require('../http');
+const { asyncRoute, renderPage, intOrNull, isIsoDate, pageWindow } = require('../http');
 const { loadReference } = require('../services/reference');
 const { saveRun } = require('../services/runs');
 const { totalLoaded } = require('../../public/js/money');
@@ -14,7 +14,6 @@ function blankLine() {
 }
 
 router.get('/runs', asyncRoute(async (req, res) => {
-  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const status = STATUSES.includes(req.query.status) ? req.query.status : '';
   const plannedDate = isIsoDate(req.query.date || '') ? req.query.date : '';
   const locationId = intOrNull(req.query.location_id);
@@ -23,23 +22,7 @@ router.get('/runs', asyncRoute(async (req, res) => {
     WHERE ($1::text IS NULL OR rr.status = $1)
       AND ($2::date IS NULL OR rr.planned_date = $2)
       AND ($3::int IS NULL OR rr.location_id = $3)`;
-  const [rows, count, locations, dates, plans] = await Promise.all([
-    query(
-      `SELECT rr.run_id, rr.planned_date::text AS planned_date, rr.status, rr.created_by,
-              l.location_name, cv.van_code, cu.full_name AS custodian_name,
-              COUNT(DISTINCT cl.atm_id)::int AS stops,
-              COALESCE(SUM(cl.amount), 0) AS total_loaded
-       FROM replenishment_runs rr
-       JOIN locations l ON l.location_id = rr.location_id
-       JOIN cash_vans cv ON cv.van_id = rr.van_id
-       JOIN custodians cu ON cu.custodian_id = rr.custodian_id
-       LEFT JOIN cassette_loads cl ON cl.run_id = rr.run_id
-       ${where}
-       GROUP BY rr.run_id, l.location_id, l.location_name, cv.van_id, cv.van_code, cu.custodian_id, cu.full_name
-       ORDER BY rr.planned_date DESC, rr.run_id DESC
-       LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}`,
-      filters
-    ),
+  const [count, locations, dates, plans] = await Promise.all([
     query(`SELECT COUNT(*)::int AS total FROM replenishment_runs rr ${where}`, filters),
     query('SELECT location_id, location_name FROM locations ORDER BY location_name'),
     query(`SELECT CURRENT_DATE::text AS today, (CURRENT_DATE + 1)::text AS tomorrow`),
@@ -50,6 +33,23 @@ router.get('/runs', asyncRoute(async (req, res) => {
            LIMIT 6`),
   ]);
   const total = count.rows[0].total;
+  const window = pageWindow(req.query.page, PAGE_SIZE, total);
+  const rows = await query(
+    `SELECT rr.run_id, rr.planned_date::text AS planned_date, rr.status, rr.created_by,
+            l.location_name, cv.van_code, cu.full_name AS custodian_name,
+            COUNT(DISTINCT cl.atm_id)::int AS stops,
+            COALESCE(SUM(cl.amount), 0) AS total_loaded
+     FROM replenishment_runs rr
+     JOIN locations l ON l.location_id = rr.location_id
+     JOIN cash_vans cv ON cv.van_id = rr.van_id
+     JOIN custodians cu ON cu.custodian_id = rr.custodian_id
+     LEFT JOIN cassette_loads cl ON cl.run_id = rr.run_id
+     ${where}
+     GROUP BY rr.run_id, l.location_id, l.location_name, cv.van_id, cv.van_code, cu.custodian_id, cu.full_name
+     ORDER BY rr.planned_date DESC, rr.run_id DESC
+     LIMIT $4 OFFSET $5`,
+    [...filters, window.pageSize, window.offset]
+  );
   renderPage(req, res, 'runs', {
     title: 'Replenishment Runs',
     rows: rows.rows,
@@ -57,8 +57,8 @@ router.get('/runs', asyncRoute(async (req, res) => {
     plans: plans.rows,
     tomorrow: dates.rows[0].tomorrow,
     total,
-    page,
-    pages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    page: window.page,
+    pages: window.pages,
     filters: { status, date: plannedDate, location_id: locationId || '' },
   });
 }));

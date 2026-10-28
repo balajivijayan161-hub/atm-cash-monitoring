@@ -20,7 +20,7 @@ router.get('/tickets', asyncRoute(async (req, res) => {
      ${where}`,
     filters
   );
-  const window = pageWindow(parseInt(req.query.page, 10), PAGE_SIZE, count.rows[0].total);
+  const window = pageWindow(req.query.page, PAGE_SIZE, count.rows[0].total);
   const [rows, engineers] = await Promise.all([
     query(
       `SELECT ft.ticket_id, ft.ticket_no, ft.title, ft.category, ft.priority, ft.status, ft.source,

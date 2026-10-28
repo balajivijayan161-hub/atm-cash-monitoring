@@ -505,29 +505,69 @@ WITH bounds AS (
   SELECT date_trunc('month', CURRENT_TIMESTAMP) AS month_start,
          CURRENT_TIMESTAMP AS period_end
 ),
+clipped AS (
+  SELECT
+    d.atm_id,
+    d.downtime_id,
+    GREATEST(d.started_at, b.month_start) AS started_at,
+    LEAST(COALESCE(d.ended_at, b.period_end), b.period_end) AS ended_at
+  FROM downtime_log d
+  CROSS JOIN bounds b
+  WHERE d.started_at < b.period_end
+    AND COALESCE(d.ended_at, b.period_end) > b.month_start
+),
+ordered AS (
+  SELECT
+    atm_id,
+    downtime_id,
+    started_at,
+    ended_at,
+    MAX(ended_at) OVER (
+      PARTITION BY atm_id
+      ORDER BY started_at, ended_at, downtime_id
+      ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+    ) AS prev_end
+  FROM clipped
+  WHERE ended_at > started_at
+),
+marked AS (
+  SELECT
+    atm_id,
+    downtime_id,
+    started_at,
+    ended_at,
+    CASE
+      WHEN prev_end IS NULL OR started_at > prev_end THEN 1
+      ELSE 0
+    END AS new_island
+  FROM ordered
+),
+islands AS (
+  SELECT
+    atm_id,
+    started_at,
+    ended_at,
+    SUM(new_island) OVER (
+      PARTITION BY atm_id
+      ORDER BY started_at, ended_at, downtime_id
+      ROWS UNBOUNDED PRECEDING
+    ) AS island_id
+  FROM marked
+),
+merged AS (
+  SELECT atm_id, MIN(started_at) AS started_at, MAX(ended_at) AS ended_at
+  FROM islands
+  GROUP BY atm_id, island_id
+),
 per_atm AS (
   SELECT
     a.atm_id,
-    COALESCE(SUM(
-      CASE
-        WHEN d.downtime_id IS NULL THEN 0
-        ELSE GREATEST(
-          EXTRACT(EPOCH FROM (
-            LEAST(COALESCE(d.ended_at, b.period_end), b.period_end)
-            - GREATEST(d.started_at, b.month_start)
-          )) / 60.0,
-          0
-        )
-      END
-    ), 0) AS downtime_minutes,
-    MAX(EXTRACT(EPOCH FROM (b.period_end - b.month_start)) / 60.0) AS elapsed_minutes
+    COALESCE(SUM(EXTRACT(EPOCH FROM (m.ended_at - m.started_at)) / 60.0), 0) AS downtime_minutes,
+    EXTRACT(EPOCH FROM (b.period_end - b.month_start)) / 60.0 AS elapsed_minutes
   FROM atms a
   CROSS JOIN bounds b
-  LEFT JOIN downtime_log d
-    ON d.atm_id = a.atm_id
-   AND d.started_at < b.period_end
-   AND COALESCE(d.ended_at, b.period_end) > b.month_start
-  GROUP BY a.atm_id
+  LEFT JOIN merged m ON m.atm_id = a.atm_id
+  GROUP BY a.atm_id, b.period_end, b.month_start
 )
 SELECT
   a.atm_id,
@@ -540,9 +580,15 @@ SELECT
   loc.location_name,
   loc.city,
   loc.region,
-  ROUND(p.downtime_minutes::numeric, 1) AS downtime_minutes,
+  ROUND(LEAST(GREATEST(p.downtime_minutes, 0), p.elapsed_minutes)::numeric, 1) AS downtime_minutes,
   ROUND(p.elapsed_minutes::numeric, 1) AS elapsed_minutes,
-  ROUND((p.downtime_minutes / NULLIF(p.elapsed_minutes, 0) * 100)::numeric, 2) AS downtime_pct
+  ROUND(
+    LEAST(
+      100,
+      GREATEST(0, p.downtime_minutes / NULLIF(p.elapsed_minutes, 0) * 100)
+    )::numeric,
+    2
+  ) AS downtime_pct
 FROM per_atm p
 JOIN atms a ON a.atm_id = p.atm_id
 JOIN branches br ON br.branch_id = a.branch_id
@@ -623,16 +669,135 @@ CREATE TABLE IF NOT EXISTS atm_link_status (
   atm_id INTEGER PRIMARY KEY REFERENCES atms (atm_id) ON DELETE CASCADE,
   online BOOLEAN NOT NULL DEFAULT TRUE,
   offline_since TIMESTAMPTZ,
-  state_as_of DATE,
+  state_as_of TIMESTAMPTZ,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-ALTER TABLE atm_link_status ADD COLUMN IF NOT EXISTS state_as_of DATE;
+ALTER TABLE atm_link_status ADD COLUMN IF NOT EXISTS state_as_of TIMESTAMPTZ;
 ALTER TABLE downtime_log ADD COLUMN IF NOT EXISTS origin VARCHAR(16);
+ALTER TABLE fault_tickets ADD COLUMN IF NOT EXISTS origin VARCHAR(16);
 
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'atm_link_status'
+      AND column_name = 'state_as_of'
+      AND data_type = 'date'
+  ) THEN
+    ALTER TABLE atm_link_status
+      ALTER COLUMN state_as_of TYPE timestamptz
+      USING (state_as_of::timestamp AT TIME ZONE 'Asia/Kolkata');
+  END IF;
+END $$;
+
+-- Placeholder state sits before the latest seeded day, so a daily file for that day still applies.
 INSERT INTO atm_link_status (atm_id, online, state_as_of)
-SELECT a.atm_id, TRUE, CURRENT_DATE
+SELECT a.atm_id, TRUE, placeholder.ts
 FROM atms a
+CROSS JOIN (
+  SELECT COALESCE(
+    (SELECT (MAX(withdrawal_date) - 1)::timestamp AT TIME ZONE 'Asia/Kolkata'
+     FROM daily_withdrawals
+     WHERE source = 'seed'),
+    ((CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date - 1)::timestamp AT TIME ZONE 'Asia/Kolkata'
+  ) AS ts
+) placeholder
 WHERE NOT EXISTS (SELECT 1 FROM atm_link_status s WHERE s.atm_id = a.atm_id);
 
-UPDATE atm_link_status SET state_as_of = CURRENT_DATE WHERE state_as_of IS NULL;
+UPDATE atm_link_status s
+SET state_as_of = placeholder.ts
+FROM (
+  SELECT COALESCE(
+    (SELECT (MAX(withdrawal_date) - 1)::timestamp AT TIME ZONE 'Asia/Kolkata'
+     FROM daily_withdrawals
+     WHERE source = 'seed'),
+    ((CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date - 1)::timestamp AT TIME ZONE 'Asia/Kolkata'
+  ) AS ts
+) placeholder
+WHERE s.state_as_of IS NULL
+   OR (
+     s.state_as_of = date_trunc('day', s.state_as_of)
+     AND (s.state_as_of AT TIME ZONE 'Asia/Kolkata')::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+     AND NOT EXISTS (
+       SELECT 1
+       FROM daily_withdrawals w
+       WHERE w.atm_id = s.atm_id
+         AND w.source = 'switch'
+         AND w.withdrawal_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+     )
+   );
+
+UPDATE downtime_log d
+SET origin = CASE
+  WHEN b.source = 'simulator'
+    OR b.filename ILIKE 'simulator-%'
+    OR b.filename ILIKE 'switch-feed-%'
+  THEN 'live_feed'
+  ELSE 'switch'
+END
+FROM switch_import_batches b
+WHERE d.origin IS NULL
+  AND substring(lower(d.notes) FROM 'switch batch ([0-9]{1,9})') ~ '^[0-9]{1,9}$'
+  AND b.batch_id = substring(lower(d.notes) FROM 'switch batch ([0-9]{1,9})')::integer;
+
+UPDATE downtime_log later
+SET ended_at = later.started_at
+WHERE later.ended_at IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM downtime_log earlier
+    WHERE earlier.atm_id = later.atm_id
+      AND earlier.ended_at IS NULL
+      AND (
+        earlier.started_at < later.started_at
+        OR (earlier.started_at = later.started_at AND earlier.downtime_id < later.downtime_id)
+      )
+  );
+
+UPDATE downtime_log
+SET ended_at = CURRENT_TIMESTAMP
+WHERE ended_at IS NULL
+  AND origin = 'live_feed';
+
+UPDATE fault_tickets ft
+SET origin = 'live_feed'
+WHERE ft.origin IS NULL
+  AND ft.source = 'monitor'
+  AND EXISTS (
+    SELECT 1
+    FROM switch_import_batches b
+    WHERE (b.source = 'simulator' OR b.filename ILIKE 'simulator-%' OR b.filename ILIKE 'switch-feed-%')
+      AND (
+        (
+          substring(lower(ft.description) FROM 'batch ([0-9]{1,9})') ~ '^[0-9]{1,9}$'
+          AND b.batch_id = substring(lower(ft.description) FROM 'batch ([0-9]{1,9})')::integer
+        )
+        OR (
+          ft.opened_at >= b.uploaded_at - interval '1 minute'
+          AND ft.opened_at <= b.uploaded_at + interval '5 minutes'
+          AND EXISTS (
+            SELECT 1
+            FROM switch_import_rows r
+            JOIN atms a ON a.atm_code = r.atm_code
+            WHERE r.batch_id = b.batch_id
+              AND r.status = 'loaded'
+              AND a.atm_id = ft.atm_id
+          )
+        )
+      )
+  );
+
+UPDATE fault_tickets
+SET status = 'closed',
+    closed_at = CURRENT_TIMESTAMP,
+    resolution = 'Feed stopped'
+WHERE status <> 'closed'
+  AND origin = 'live_feed';
+
+UPDATE switch_import_batches
+SET source = 'simulator'
+WHERE source IS DISTINCT FROM 'simulator'
+  AND (filename ILIKE 'simulator-%' OR filename ILIKE 'switch-feed-%');

@@ -4,12 +4,13 @@ const path = require('path');
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { createApp } = require('../src/app');
-const { pageWindow } = require('../src/http');
+const { pageWindow, batchName } = require('../src/http');
 const { parseSwitchFile } = require('../src/lib/switchFile');
 const { importSwitchContent } = require('../src/services/switchImport');
 const { rowUpdatesCurrentState, closeLiveFeedDowntime } = require('../src/services/ingestionRules');
 const { ingestTracked, scanInboundOnce, classifyIngestResult } = require('../src/services/inboundPoller');
 const { runSimulatorTick, shouldAutoStop } = require('../src/services/simulator');
+const { applySchema } = require('../src/db');
 const { ensureSchema, withRollback, makeAtm, pool } = require('./helpers');
 
 let server;
@@ -63,20 +64,39 @@ test('the live feed stops itself after the cap and not before', () => {
   assert.equal(classifyIngestResult({ ok: true, duplicate: true, loaded: 0 }), 'processed');
   assert.equal(classifyIngestResult({ ok: true, loaded: 0 }), 'rejected');
   assert.equal(classifyIngestResult({ ok: false }), 'rejected');
-  assert.equal(rowUpdatesCurrentState('2024-08-02', null, '2026-10-28'), false);
-  assert.equal(rowUpdatesCurrentState('2026-10-28', null, '2026-10-28'), true);
-  assert.equal(rowUpdatesCurrentState('2024-08-02', '2026-10-28', '2026-10-28'), false);
-  assert.equal(rowUpdatesCurrentState('2026-10-28', '2026-10-28', '2026-10-28'), true);
+  assert.equal(rowUpdatesCurrentState('2024-08-02', null), true);
+  assert.equal(rowUpdatesCurrentState('2026-10-28', null), true);
+  assert.equal(rowUpdatesCurrentState('2024-08-02', '2026-10-28'), false);
+  assert.equal(rowUpdatesCurrentState('2026-10-28', '2026-10-28'), true);
+  assert.equal(rowUpdatesCurrentState('2026-10-27', '2026-10-28T00:00:00+05:30'), false);
+  assert.equal(rowUpdatesCurrentState('2026-10-27', '2026-10-27T00:00:00+05:30'), true);
+  const named = batchName({
+    source: 'manual',
+    filename: 'simulator-15.csv',
+    uploaded_at: new Date('2026-10-28T07:15:00+05:30'),
+    batch_id: 15,
+  });
+  assert.match(named, /Bank Feed/);
+  assert.doesNotMatch(named, /\.csv|simulator-/i);
   const window = pageWindow(3, 80, 200);
   assert.equal(window.page, 3);
   assert.equal(window.pages, 3);
   assert.equal(window.offset, 160);
   assert.equal(pageWindow(9, 80, 10).page, 1);
+  assert.equal(pageWindow('1e21', 25, 450).page, 1);
+  assert.equal(pageWindow('1e21', 25, 450).offset, 0);
+  assert.equal(pageWindow('19', 25, 450).page, 18);
+  assert.equal(pageWindow('19', 25, 450).pages, 18);
 });
 
 test('ingestion raises one cash alert, one ticket per fault, and downtime only after the offline threshold', async () => {
   await withRollback(async (client) => {
     const atm = await makeAtm(client, { capacity: 300000, cash: 80000 });
+    await client.query(
+      `INSERT INTO atm_link_status (atm_id, online, state_as_of)
+       VALUES ($1, TRUE, CURRENT_TIMESTAMP)`,
+      [atm.atmId]
+    );
     const today = (await client.query('SELECT CURRENT_DATE::text AS today')).rows[0].today;
     const pastOnly = await importSwitchContent(client, {
       filename: 'past.csv',
@@ -235,17 +255,177 @@ test('ingestion raises one cash alert, one ticket per fault, and downtime only a
     );
     assert.deepEqual(stillOpen.rows.map((row) => row.reason), ['hardware']);
     assert.equal(stillOpen.rows[0].notes, 'keep this note');
+    await client.query(
+      `INSERT INTO fault_tickets
+         (atm_id, title, description, category, priority, status, source, origin)
+       VALUES ($1, 'Feed fault', 'Raised from bank data.', 'hardware', 'medium', 'open', 'monitor', 'live_feed')`,
+      [atm.atmId]
+    );
     await closeLiveFeedDowntime(client);
     const afterClose = await client.query(
       `SELECT COUNT(*)::int AS n FROM downtime_log WHERE atm_id = $1 AND ended_at IS NULL AND origin = 'live_feed'`,
       [atm.atmId]
     );
     assert.equal(afterClose.rows[0].n, 0);
+    const feedTickets = await client.query(
+      `SELECT status, resolution FROM fault_tickets WHERE atm_id = $1 AND origin = 'live_feed'`,
+      [atm.atmId]
+    );
+    assert.equal(feedTickets.rows[0].status, 'closed');
+    assert.equal(feedTickets.rows[0].resolution, 'Feed stopped');
+    const switchTickets = await client.query(
+      `SELECT COUNT(*)::int AS n FROM fault_tickets
+       WHERE atm_id = $1 AND origin = 'switch' AND status <> 'closed'`,
+      [atm.atmId]
+    );
+    assert.equal(switchTickets.rows[0].n, 2);
     const hardwareLeft = await client.query(
       `SELECT notes FROM downtime_log WHERE atm_id = $1 AND reason = 'hardware' AND ended_at IS NULL`,
       [atm.atmId]
     );
     assert.equal(hardwareLeft.rows[0].notes, 'keep this note');
+  });
+});
+
+test('a daily file applies when no newer observation exists, and an older day does not', async () => {
+  await withRollback(async (client) => {
+    const atm = await makeAtm(client, { capacity: 300000, cash: 80000 });
+    const bounds = await client.query(
+      `SELECT (CURRENT_DATE - 1)::text AS yesterday, (CURRENT_DATE - 2)::text AS older`
+    );
+    const { yesterday, older } = bounds.rows[0];
+    await client.query(
+      `INSERT INTO atm_link_status (atm_id, online, state_as_of)
+       VALUES ($1, TRUE, ($2::date::timestamp AT TIME ZONE 'Asia/Kolkata'))`,
+      [atm.atmId, older]
+    );
+    const loaded = await importSwitchContent(client, {
+      filename: 'yesterday.csv',
+      content: feedCsv(atm, { date: yesterday, cash: 10000, fault: 'hardware', online: '0' }),
+      replaceExisting: false,
+      rules: { cashThresholdPct: 20, offlineMinutes: 0 },
+    });
+    assert.equal(loaded.loaded, 1);
+    const cash = await client.query('SELECT current_cash FROM atms WHERE atm_id = $1', [atm.atmId]);
+    assert.equal(Number(cash.rows[0].current_cash), 10000);
+    const alerts = await client.query(
+      `SELECT COUNT(*)::int AS n FROM replenishment_requests WHERE atm_id = $1 AND status = 'open'`,
+      [atm.atmId]
+    );
+    assert.equal(alerts.rows[0].n, 1);
+    const tickets = await client.query(
+      `SELECT origin FROM fault_tickets WHERE atm_id = $1 AND status <> 'closed'`,
+      [atm.atmId]
+    );
+    assert.deepEqual(tickets.rows.map((row) => row.origin), ['switch']);
+    const down = await client.query(
+      `SELECT COUNT(*)::int AS n FROM downtime_log WHERE atm_id = $1 AND ended_at IS NULL`,
+      [atm.atmId]
+    );
+    assert.equal(down.rows[0].n, 1);
+
+    const blocked = await importSwitchContent(client, {
+      filename: 'older.csv',
+      content: feedCsv(atm, { date: older, cash: 250000, fault: 'communication' }),
+      replaceExisting: false,
+      rules: { cashThresholdPct: 20, offlineMinutes: 0 },
+    });
+    assert.equal(blocked.loaded, 1);
+    const cashAfter = await client.query('SELECT current_cash FROM atms WHERE atm_id = $1', [atm.atmId]);
+    assert.equal(Number(cashAfter.rows[0].current_cash), 10000);
+    const extraTickets = await client.query(
+      `SELECT COUNT(*)::int AS n FROM fault_tickets WHERE atm_id = $1 AND fault_code = 'communication'`,
+      [atm.atmId]
+    );
+    assert.equal(extraTickets.rows[0].n, 0);
+  });
+});
+
+test('an offline row does not open a second downtime while any outage is already open', async () => {
+  await withRollback(async (client) => {
+    const atm = await makeAtm(client, { capacity: 300000, cash: 80000 });
+    const today = (await client.query('SELECT CURRENT_DATE::text AS today')).rows[0].today;
+    await client.query(
+      `INSERT INTO downtime_log (atm_id, started_at, reason, notes)
+       VALUES ($1, CURRENT_TIMESTAMP - interval '3 hours', 'hardware', 'keep this note')`,
+      [atm.atmId]
+    );
+    await importSwitchContent(client, {
+      filename: 'overlap-only.csv',
+      content: feedCsv(atm, { date: today, online: '0' }),
+      replaceExisting: true,
+      rules: { offlineMinutes: 0 },
+    });
+    const open = await client.query(
+      `SELECT reason, notes, origin FROM downtime_log WHERE atm_id = $1 AND ended_at IS NULL`,
+      [atm.atmId]
+    );
+    assert.equal(open.rowCount, 1);
+    assert.equal(open.rows[0].reason, 'hardware');
+    assert.equal(open.rows[0].notes, 'keep this note');
+    assert.equal(open.rows[0].origin, null);
+  });
+});
+
+test('migration backfills feed origin, closes stale feed outages, and repairs overlapping open rows', async () => {
+  await withRollback(async (client) => {
+    const atm = await makeAtm(client);
+    const batch = await client.query(
+      `INSERT INTO switch_import_batches
+         (filename, file_format, row_count, loaded_count, error_count, replace_existing, status, source)
+       VALUES ('simulator-old.csv', 'csv', 1, 1, 0, false, 'loaded', 'manual')
+       RETURNING batch_id`
+    );
+    const batchId = batch.rows[0].batch_id;
+    await client.query(
+      `INSERT INTO downtime_log (atm_id, started_at, reason, notes, origin)
+       VALUES
+         ($1, CURRENT_TIMESTAMP - interval '2 hours', 'hardware', 'keep this note', NULL),
+         ($1, CURRENT_TIMESTAMP - interval '30 minutes', 'communication', $2, NULL)`,
+      [atm.atmId, `Offline from switch batch ${batchId}.`]
+    );
+    await client.query(
+      `INSERT INTO fault_tickets (atm_id, title, description, category, priority, status, source)
+       VALUES
+         ($1, 'Link down', $2, 'communication', 'medium', 'open', 'monitor'),
+         ($1, 'Cassette', 'Raised from switch batch 999999991', 'cassette_error', 'medium', 'open', 'monitor')`,
+      [atm.atmId, `Raised from switch batch ${batchId}`]
+    );
+    await applySchema(client);
+    const open = await client.query(
+      `SELECT reason, notes, origin, ended_at IS NULL AS still_open
+       FROM downtime_log WHERE atm_id = $1 ORDER BY started_at`,
+      [atm.atmId]
+    );
+    const hardware = open.rows.find((row) => row.reason === 'hardware');
+    const feed = open.rows.find((row) => row.reason === 'communication');
+    assert.equal(hardware.still_open, true);
+    assert.equal(hardware.notes, 'keep this note');
+    assert.equal(feed.origin, 'live_feed');
+    assert.equal(feed.still_open, false);
+    const ticket = await client.query(
+      `SELECT status, resolution, origin FROM fault_tickets WHERE description = $1`,
+      [`Raised from switch batch ${batchId}`]
+    );
+    assert.equal(ticket.rows[0].status, 'closed');
+    assert.equal(ticket.rows[0].resolution, 'Feed stopped');
+    assert.equal(ticket.rows[0].origin, 'live_feed');
+    const kept = await client.query(
+      `SELECT status, origin FROM fault_tickets WHERE description = 'Raised from switch batch 999999991'`
+    );
+    assert.equal(kept.rows[0].status, 'open');
+    assert.equal(kept.rows[0].origin, null);
+    const named = await client.query(
+      'SELECT source FROM switch_import_batches WHERE batch_id = $1',
+      [batchId]
+    );
+    assert.equal(named.rows[0].source, 'simulator');
+    const state = await client.query(
+      `SELECT state_as_of < date_trunc('day', CURRENT_TIMESTAMP) AS earlier
+       FROM atm_link_status WHERE atm_id = $1`,
+      [atm.atmId]
+    );
+    if (state.rowCount) assert.equal(state.rows[0].earlier, true);
   });
 });
 
@@ -352,4 +532,28 @@ test('pages no longer describe the ledger as synthetic and imports are linked', 
   const importsHtml = await imports.text();
   assert.match(importsHtml, /Received \(IST\)/);
   assert.doesNotMatch(importsHtml, /synthetic|Demo data|sample data/i);
+  assert.doesNotMatch(importsHtml, /simulator-|\.csv/i);
+
+  async function paged(path) {
+    const response = await fetch(`${base}${path}`);
+    const html = await response.text();
+    assert.equal(response.status, 200, html.slice(0, 300));
+    const match = html.match(/Page (\d+) of (\d+)/);
+    if (match) {
+      assert.ok(Number(match[1]) >= 1);
+      assert.ok(Number(match[1]) <= Number(match[2]));
+    }
+    return { html, match };
+  }
+  const atms = await paged('/atms?page=1e21');
+  assert.doesNotMatch(atms.html, /Page 1e21/);
+  await paged('/runs?page=1e21');
+  const beyond = await paged('/atms?page=19');
+  if (beyond.match && Number(beyond.match[2]) < 19) assert.equal(beyond.match[1], beyond.match[2]);
+  const runsBeyond = await paged('/runs?page=19');
+  if (runsBeyond.match && Number(runsBeyond.match[2]) < 19) assert.equal(runsBeyond.match[1], runsBeyond.match[2]);
+  await paged('/imports?page=1e21');
+  await paged('/tickets?page=1e21');
+  await paged('/alerts?page=1e21');
+  await paged('/downtime?page=1e21');
 });

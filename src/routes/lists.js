@@ -7,7 +7,7 @@ const PAGE_SIZE = 80;
 
 router.get('/alerts', asyncRoute(async (req, res) => {
   const count = await query(`SELECT COUNT(*)::int AS total FROM replenishment_requests WHERE status = 'open'`);
-  const window = pageWindow(parseInt(req.query.page, 10), PAGE_SIZE, count.rows[0].total);
+  const window = pageWindow(req.query.page, PAGE_SIZE, count.rows[0].total);
   const rows = await query(
     `SELECT r.request_id, r.current_cash, r.capacity_amount, r.threshold_pct, r.created_at,
             a.atm_id, a.atm_code, a.site_name, l.location_name
@@ -30,7 +30,7 @@ router.get('/alerts', asyncRoute(async (req, res) => {
 
 router.get('/downtime', asyncRoute(async (req, res) => {
   const count = await query(`SELECT COUNT(*)::int AS total FROM downtime_log WHERE ended_at IS NULL`);
-  const window = pageWindow(parseInt(req.query.page, 10), PAGE_SIZE, count.rows[0].total);
+  const window = pageWindow(req.query.page, PAGE_SIZE, count.rows[0].total);
   const rows = await query(
     `SELECT d.downtime_id, d.started_at, d.reason, d.notes, a.atm_id, a.atm_code, a.site_name, l.location_name
      FROM downtime_log d

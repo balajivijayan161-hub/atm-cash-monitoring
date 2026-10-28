@@ -1,13 +1,12 @@
 const express = require('express');
 const { query } = require('../db');
-const { asyncRoute, renderPage, intOrNull, likePattern } = require('../http');
+const { asyncRoute, renderPage, intOrNull, likePattern, pageWindow } = require('../http');
 
 const router = express.Router();
 const STATUSES = ['active', 'cash_out', 'out_of_service', 'decommissioned'];
 const PAGE_SIZE = 25;
 
 router.get('/atms', asyncRoute(async (req, res) => {
-  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const locationId = intOrNull(req.query.location_id);
   const status = STATUSES.includes(req.query.status) ? req.query.status : '';
   const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 80) : '';
@@ -22,19 +21,7 @@ router.get('/atms', asyncRoute(async (req, res) => {
         OR a.site_name ILIKE $3 ESCAPE '\\'
         OR b.branch_name ILIKE $3 ESCAPE '\\'
       )`;
-  const [rows, count, locations] = await Promise.all([
-    query(
-      `SELECT a.atm_id, a.atm_code, a.site_name, a.status, a.current_cash, a.capacity_amount,
-              b.branch_name, l.location_name, l.city, d.downtime_pct
-       FROM atms a
-       JOIN branches b ON b.branch_id = a.branch_id
-       JOIN locations l ON l.location_id = b.location_id
-       LEFT JOIN v_atm_downtime_mtd d ON d.atm_id = a.atm_id
-       ${where}
-       ORDER BY a.atm_code
-       LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}`,
-      filters
-    ),
+  const [count, locations] = await Promise.all([
     query(
       `SELECT COUNT(*)::int AS total
        FROM atms a
@@ -46,13 +33,26 @@ router.get('/atms', asyncRoute(async (req, res) => {
     query('SELECT location_id, location_name FROM locations ORDER BY location_name'),
   ]);
   const total = count.rows[0].total;
+  const window = pageWindow(req.query.page, PAGE_SIZE, total);
+  const rows = await query(
+    `SELECT a.atm_id, a.atm_code, a.site_name, a.status, a.current_cash, a.capacity_amount,
+            b.branch_name, l.location_name, l.city, d.downtime_pct
+     FROM atms a
+     JOIN branches b ON b.branch_id = a.branch_id
+     JOIN locations l ON l.location_id = b.location_id
+     LEFT JOIN v_atm_downtime_mtd d ON d.atm_id = a.atm_id
+     ${where}
+     ORDER BY a.atm_code
+     LIMIT $4 OFFSET $5`,
+    [...filters, window.pageSize, window.offset]
+  );
   renderPage(req, res, 'atms', {
     title: 'ATMs',
     rows: rows.rows,
     locations: locations.rows,
     total,
-    page,
-    pages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    page: window.page,
+    pages: window.pages,
     filters: { location_id: locationId || '', status, q },
   });
 }));

@@ -7,7 +7,7 @@ const PAGE_SIZE = 80;
 
 router.get('/imports', asyncRoute(async (req, res) => {
   const count = await query('SELECT COUNT(*)::int AS total FROM switch_import_batches');
-  const window = pageWindow(parseInt(req.query.page, 10), PAGE_SIZE, count.rows[0].total);
+  const window = pageWindow(req.query.page, PAGE_SIZE, count.rows[0].total);
   const rows = await query(
     `SELECT batch_id, filename, source, file_format, uploaded_at, row_count, loaded_count, error_count, status
      FROM switch_import_batches

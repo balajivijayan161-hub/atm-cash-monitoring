@@ -21,10 +21,28 @@ function ruleOptions(overrides = {}) {
   };
 }
 
-function rowUpdatesCurrentState(txnDate, stateAsOf, today) {
-  if (!txnDate) return false;
-  if (!stateAsOf) return txnDate >= today;
-  return txnDate >= stateAsOf;
+function endOfIstDayMs(txnDate) {
+  const day = String(txnDate || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+  const ms = Date.parse(`${day}T23:59:59.999+05:30`);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+function stateMillis(stateAsOf) {
+  if (stateAsOf instanceof Date) return stateAsOf.getTime();
+  const text = String(stateAsOf).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return Date.parse(`${text}T00:00:00+05:30`);
+  const parsed = Date.parse(text.includes('T') ? text : text.replace(' ', 'T'));
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function rowUpdatesCurrentState(txnDate, stateAsOf) {
+  const eventMs = endOfIstDayMs(txnDate);
+  if (eventMs == null) return false;
+  if (stateAsOf == null || stateAsOf === '') return true;
+  const stateMs = stateMillis(stateAsOf);
+  if (stateMs == null) return true;
+  return eventMs >= stateMs;
 }
 
 function downtimeOrigin(batchSource) {
@@ -33,8 +51,6 @@ function downtimeOrigin(batchSource) {
 
 async function applyIngestionRules(client, rows, options = {}) {
   const settings = ruleOptions(options);
-  const todayRes = await client.query('SELECT CURRENT_DATE::text AS today');
-  const today = todayRes.rows[0].today;
   const loaded = rows.filter((row) => row && row.loaded && row.atmId);
   const ordered = [...loaded].sort((a, b) => {
     const byDate = String(a.txnDate || '').localeCompare(String(b.txnDate || ''));
@@ -45,7 +61,7 @@ async function applyIngestionRules(client, rows, options = {}) {
   const ids = [...new Set(ordered.map((row) => row.atmId))];
   if (ids.length) {
     const known = await client.query(
-      'SELECT atm_id, state_as_of::text AS state_as_of FROM atm_link_status WHERE atm_id = ANY($1::int[])',
+      'SELECT atm_id, state_as_of FROM atm_link_status WHERE atm_id = ANY($1::int[])',
       [ids]
     );
     for (const row of known.rows) stateAsOf.set(row.atm_id, row.state_as_of);
@@ -53,18 +69,19 @@ async function applyIngestionRules(client, rows, options = {}) {
   for (const row of ordered) {
     const hasState = row.cashLevel != null || (row.faultCode && row.faultCode !== 'offline') || row.online === true || row.online === false;
     if (!hasState) continue;
-    if (!rowUpdatesCurrentState(row.txnDate, stateAsOf.get(row.atmId) || null, today)) continue;
+    if (!rowUpdatesCurrentState(row.txnDate, stateAsOf.get(row.atmId) || null)) continue;
     if (row.cashLevel != null) await applyCashLevel(client, row, settings);
     if (row.faultCode && row.faultCode !== 'offline') await applyFault(client, row);
     if (row.online === true || row.online === false) await applyLink(client, row, settings);
-    await client.query(
+    const saved = await client.query(
       `INSERT INTO atm_link_status (atm_id, online, state_as_of)
-       VALUES ($1, TRUE, $2::date)
+       VALUES ($1, TRUE, ($2::date + time '23:59:59.999') AT TIME ZONE 'Asia/Kolkata')
        ON CONFLICT (atm_id) DO UPDATE
-         SET state_as_of = EXCLUDED.state_as_of, updated_at = CURRENT_TIMESTAMP`,
+         SET state_as_of = EXCLUDED.state_as_of, updated_at = CURRENT_TIMESTAMP
+       RETURNING state_as_of`,
       [row.atmId, row.txnDate]
     );
-    stateAsOf.set(row.atmId, row.txnDate);
+    stateAsOf.set(row.atmId, saved.rows[0].state_as_of);
   }
   return settings;
 }
@@ -74,6 +91,13 @@ async function closeLiveFeedDowntime(client) {
     `UPDATE downtime_log
      SET ended_at = CURRENT_TIMESTAMP
      WHERE ended_at IS NULL AND origin = 'live_feed'`
+  );
+  await client.query(
+    `UPDATE fault_tickets
+     SET status = 'closed',
+         closed_at = CURRENT_TIMESTAMP,
+         resolution = 'Feed stopped'
+     WHERE status <> 'closed' AND origin = 'live_feed'`
   );
 }
 
@@ -120,8 +144,8 @@ async function applyFault(client, row) {
   if (existing.rowCount) return;
   await client.query(
     `INSERT INTO fault_tickets
-       (atm_id, title, description, category, priority, status, source, fault_code)
-     VALUES ($1, $2, $3, $4, $5, 'open', 'monitor', $6)`,
+       (atm_id, title, description, category, priority, status, source, fault_code, origin)
+     VALUES ($1, $2, $3, $4, $5, 'open', 'monitor', $6, $7)`,
     [
       row.atmId,
       `${titleCase(row.faultCode)} at ${row.atmCode}`,
@@ -129,6 +153,7 @@ async function applyFault(client, row) {
       spec.category,
       spec.priority,
       row.faultCode,
+      downtimeOrigin(row.batchSource),
     ]
   );
 }
@@ -190,21 +215,23 @@ async function applyLink(client, row, settings) {
   if (minutes < settings.offlineMinutes) return;
 
   const reason = (TICKET_FAULTS[row.faultCode] && TICKET_FAULTS[row.faultCode].downtime) || 'communication';
-  const open = await client.query(
-    `SELECT downtime_id FROM downtime_log
-     WHERE atm_id = $1 AND ended_at IS NULL AND origin = $2
-     LIMIT 1`,
-    [row.atmId, origin]
+  const openRows = await client.query(
+    `SELECT downtime_id, origin FROM downtime_log
+     WHERE atm_id = $1 AND ended_at IS NULL
+     ORDER BY started_at, downtime_id`,
+    [row.atmId]
   );
-  if (open.rowCount) {
+  const own = openRows.rows.find((item) => item.origin === origin);
+  if (own) {
     await client.query(
       `UPDATE downtime_log
        SET notes = $2
        WHERE downtime_id = $1`,
-      [open.rows[0].downtime_id, 'Still offline.']
+      [own.downtime_id, 'Still offline.']
     );
     return;
   }
+  if (openRows.rowCount) return;
   await client.query(
     `INSERT INTO downtime_log (atm_id, started_at, reason, notes, origin)
      VALUES ($1, $2, $3, $4, $5)`,

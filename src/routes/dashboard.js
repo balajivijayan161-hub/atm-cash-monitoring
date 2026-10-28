@@ -28,26 +28,63 @@ router.get('/', asyncRoute(async (req, res) => {
            WHERE withdrawal_date = CURRENT_DATE - 1`),
     query(`SELECT location_name,
                   ROUND(AVG(downtime_pct)::numeric, 2) AS downtime_pct,
-                  ROUND((100 - AVG(downtime_pct))::numeric, 2) AS uptime_pct
+                  LEAST(100, GREATEST(0, ROUND((100 - AVG(downtime_pct))::numeric, 2))) AS uptime_pct
            FROM v_atm_downtime_mtd
            GROUP BY location_id, location_name
            ORDER BY location_name`),
-    query(`SELECT to_char(gs::date, 'YYYY-MM-DD') AS day,
-                  COALESCE(ROUND(SUM(
-                    CASE
-                      WHEN d.downtime_id IS NULL THEN 0
-                      ELSE GREATEST(EXTRACT(EPOCH FROM (
-                        LEAST(COALESCE(d.ended_at, CURRENT_TIMESTAMP), (gs::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')
-                        - GREATEST(d.started_at, gs::date::timestamp AT TIME ZONE 'Asia/Kolkata')
-                      )) / 60.0, 0)
-                    END
-                  )::numeric, 0), 0) AS minutes
-           FROM generate_series(CURRENT_DATE - 13, CURRENT_DATE, interval '1 day') AS gs
-           LEFT JOIN downtime_log d
-             ON d.started_at < ((gs::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')
-            AND COALESCE(d.ended_at, CURRENT_TIMESTAMP) > (gs::date::timestamp AT TIME ZONE 'Asia/Kolkata')
-           GROUP BY gs
-           ORDER BY gs`),
+    query(`WITH days AS (
+             SELECT gs::date AS day,
+                    (gs::date::timestamp AT TIME ZONE 'Asia/Kolkata') AS day_start,
+                    LEAST(
+                      ((gs::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata'),
+                      CURRENT_TIMESTAMP
+                    ) AS day_end
+             FROM generate_series(CURRENT_DATE - 13, CURRENT_DATE, interval '1 day') AS gs
+           ),
+           clipped AS (
+             SELECT days.day, d.atm_id, d.downtime_id,
+                    GREATEST(d.started_at, days.day_start) AS started_at,
+                    LEAST(COALESCE(d.ended_at, CURRENT_TIMESTAMP), days.day_end) AS ended_at
+             FROM days
+             JOIN downtime_log d
+               ON d.started_at < days.day_end
+              AND COALESCE(d.ended_at, CURRENT_TIMESTAMP) > days.day_start
+           ),
+           ordered AS (
+             SELECT day, atm_id, downtime_id, started_at, ended_at,
+                    MAX(ended_at) OVER (
+                      PARTITION BY day, atm_id
+                      ORDER BY started_at, ended_at, downtime_id
+                      ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                    ) AS prev_end
+             FROM clipped
+             WHERE ended_at > started_at
+           ),
+           marked AS (
+             SELECT day, atm_id, downtime_id, started_at, ended_at,
+                    CASE WHEN prev_end IS NULL OR started_at > prev_end THEN 1 ELSE 0 END AS new_island
+             FROM ordered
+           ),
+           islands AS (
+             SELECT day, atm_id, started_at, ended_at,
+                    SUM(new_island) OVER (
+                      PARTITION BY day, atm_id
+                      ORDER BY started_at, ended_at, downtime_id
+                      ROWS UNBOUNDED PRECEDING
+                    ) AS island_id
+             FROM marked
+           ),
+           merged AS (
+             SELECT day, MIN(started_at) AS started_at, MAX(ended_at) AS ended_at
+             FROM islands
+             GROUP BY day, atm_id, island_id
+           )
+           SELECT to_char(days.day, 'YYYY-MM-DD') AS day,
+                  COALESCE(ROUND(SUM(EXTRACT(EPOCH FROM (merged.ended_at - merged.started_at)) / 60.0)::numeric, 0), 0) AS minutes
+           FROM days
+           LEFT JOIN merged ON merged.day = days.day
+           GROUP BY days.day
+           ORDER BY days.day`),
     query(`SELECT EXTRACT(DOW FROM withdrawal_date)::int AS dow, COALESCE(SUM(amount), 0) AS amount
            FROM daily_withdrawals
            WHERE ${lastEightWeeks('withdrawal_date')}
@@ -79,7 +116,9 @@ router.get('/', asyncRoute(async (req, res) => {
   ]);
 
   const fleetRow = fleet.rows[0] || {};
-  const uptime = fleetRow.avg_downtime_pct == null ? null : Math.round((100 - Number(fleetRow.avg_downtime_pct)) * 100) / 100;
+  const uptime = fleetRow.avg_downtime_pct == null
+    ? null
+    : Math.round(Math.min(100, Math.max(0, 100 - Number(fleetRow.avg_downtime_pct))) * 100) / 100;
   const weekdayOrder = [1, 2, 3, 4, 5, 6, 0];
   const weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const byDow = new Map(byWeekday.rows.map((row) => [row.dow, Number(row.amount)]));
