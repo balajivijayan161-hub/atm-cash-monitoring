@@ -1,5 +1,6 @@
 const path = require('path');
 const express = require('express');
+const helmet = require('helmet');
 const { query } = require('./db');
 const { installAuth } = require('./auth/gate');
 const {
@@ -24,6 +25,22 @@ function createApp() {
   app.set('views', path.join(__dirname, '..', 'views'));
   app.set('trust proxy', 1);
   app.disable('x-powered-by');
+  app.use(helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+        imgSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+    frameguard: { action: 'deny' },
+    strictTransportSecurity: process.env.NODE_ENV === 'production' ? undefined : false,
+  }));
 
   app.locals.inr = inr;
   app.locals.pct = pct;

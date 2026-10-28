@@ -2,10 +2,9 @@ const express = require('express');
 const { query } = require('../db');
 const { asyncRoute, renderPage, intOrNull, likePattern, pageWindow } = require('../http');
 const { scopeBinds, atmScopeSql } = require('../auth/permissions');
-const { requireCan, deny } = require('../auth/gate');
+const { deny, guard } = require('../auth/gate');
 
 const router = express.Router();
-router.use(requireCan('atms'));
 const STATUSES = ['active', 'cash_out', 'out_of_service', 'decommissioned'];
 const PAGE_SIZE = 25;
 
@@ -135,4 +134,4 @@ router.get('/atms/:id', asyncRoute(async (req, res) => {
   });
 }));
 
-module.exports = router;
+module.exports = guard(router, 'atms');

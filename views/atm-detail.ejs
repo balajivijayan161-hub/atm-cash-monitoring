@@ -51,7 +51,7 @@
               <td><%= prettyDate(row.withdrawal_date) %></td>
               <td class="num"><%= inr(row.amount) %></td>
               <td class="num"><%= row.txn_count %></td>
-              <td><%= row.source %></td>
+              <td><%= sourceLabel(row.source) %></td>
             </tr>
           <% }) %>
         </tbody>

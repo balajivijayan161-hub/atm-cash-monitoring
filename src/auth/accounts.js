@@ -64,38 +64,20 @@ async function seedAccessUsers(client) {
     const custodianId = account.role === 'custodian' ? anchors.custodianId : null;
     const engineerId = account.role === 'engineer' ? anchors.engineerId : null;
     const hash = password ? await hashPassword(password) : null;
-    if (hash) {
+    const inserted = await db.query(
+      `INSERT INTO users
+         (username, full_name, role, region, branch_id, custodian_id, engineer_id, password_hash, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE)
+       ON CONFLICT (username) DO NOTHING
+       RETURNING user_id`,
+      [account.username, account.fullName, account.role, region, branchId, custodianId, engineerId, hash]
+    );
+    if (!inserted.rowCount && hash) {
       await db.query(
-        `INSERT INTO users
-           (username, full_name, role, region, branch_id, custodian_id, engineer_id, password_hash, active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE)
-         ON CONFLICT (username) DO UPDATE
-           SET password_hash = EXCLUDED.password_hash,
-               full_name = EXCLUDED.full_name,
-               role = EXCLUDED.role,
-               region = EXCLUDED.region,
-               branch_id = EXCLUDED.branch_id,
-               custodian_id = EXCLUDED.custodian_id,
-               engineer_id = EXCLUDED.engineer_id,
-               active = TRUE,
-               updated_at = CURRENT_TIMESTAMP`,
-        [account.username, account.fullName, account.role, region, branchId, custodianId, engineerId, hash]
-      );
-    } else {
-      await db.query(
-        `INSERT INTO users
-           (username, full_name, role, region, branch_id, custodian_id, engineer_id, password_hash, active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, TRUE)
-         ON CONFLICT (username) DO UPDATE
-           SET full_name = EXCLUDED.full_name,
-               role = EXCLUDED.role,
-               region = EXCLUDED.region,
-               branch_id = EXCLUDED.branch_id,
-               custodian_id = EXCLUDED.custodian_id,
-               engineer_id = EXCLUDED.engineer_id,
-               active = TRUE,
-               updated_at = CURRENT_TIMESTAMP`,
-        [account.username, account.fullName, account.role, region, branchId, custodianId, engineerId]
+        `UPDATE users
+         SET password_hash = $2
+         WHERE username = $1 AND password_hash IS NULL`,
+        [account.username, hash]
       );
     }
   }
@@ -116,4 +98,11 @@ function lockoutSeconds(lockedUntil, now = new Date()) {
   return Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 1000));
 }
 
-module.exports = { seedAccessUsers, lockoutSeconds, DEMO_USERS, envSecret, setupOpen };
+async function endUserSessions(userId) {
+  await query(
+    `DELETE FROM session WHERE (sess::jsonb #>> '{user,user_id}') = $1`,
+    [String(userId)]
+  );
+}
+
+module.exports = { seedAccessUsers, lockoutSeconds, DEMO_USERS, envSecret, setupOpen, endUserSessions };

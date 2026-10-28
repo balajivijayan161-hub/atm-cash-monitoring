@@ -87,8 +87,9 @@ test('the live feed stops itself after the cap and not before', () => {
   assert.equal(window.pages, 3);
   assert.equal(window.offset, 160);
   assert.equal(pageWindow(9, 80, 10).page, 1);
-  assert.equal(pageWindow('1e21', 25, 450).page, 1);
-  assert.equal(pageWindow('1e21', 25, 450).offset, 0);
+  assert.equal(pageWindow('1e21', 25, 450).page, 18);
+  assert.equal(pageWindow('1e20', 25, 450).page, 18);
+  assert.equal(pageWindow('1e21', 25, 450).offset, 425);
   assert.equal(pageWindow('19', 25, 450).page, 18);
   assert.equal(pageWindow('19', 25, 450).pages, 18);
 });

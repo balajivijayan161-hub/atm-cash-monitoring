@@ -58,9 +58,7 @@ function recordId(req) {
 }
 
 function clientIp(req) {
-  const forwarded = req.get('x-forwarded-for');
-  if (forwarded) return forwarded.split(',')[0].trim().slice(0, 64);
-  return (req.ip || '').slice(0, 64);
+  return String(req.ip || '').slice(0, 64);
 }
 
 async function writeSessionEvent(client, row) {

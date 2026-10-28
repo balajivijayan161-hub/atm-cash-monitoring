@@ -1,13 +1,12 @@
 const express = require('express');
 const { query } = require('../db');
 const { asyncRoute, renderPage, intOrNull } = require('../http');
-const { requireCan, deny } = require('../auth/gate');
+const { deny, guard } = require('../auth/gate');
 const { scopeBinds, atmScopeSql } = require('../auth/permissions');
 const { recordChange } = require('../auth/activity');
 const { lastEightWeeks } = require('../lib/windows');
 
 const router = express.Router();
-router.use(requireCan('reports'));
 const WEEKDAY_KEYS = [
   ['mon', 1],
   ['tue', 2],
@@ -50,7 +49,19 @@ router.get('/reports/van-cashouts', asyncRoute(async (req, res) => {
 }));
 
 router.get('/reports/withdrawal-matrix', asyncRoute(async (req, res) => {
-  const locations = await query('SELECT location_id, location_name, city FROM locations ORDER BY location_name');
+  const scope = scopeBinds(req.user);
+  const locations = await query(
+    `SELECT l.location_id, l.location_name, l.city
+     FROM locations l
+     WHERE ($1::text IS NULL OR l.region = $1)
+       AND ($2::int IS NULL OR EXISTS (
+         SELECT 1 FROM branches b WHERE b.location_id = l.location_id AND b.branch_id = $2
+       ))
+       AND $3::int IS NULL
+       AND $4::int IS NULL
+     ORDER BY l.location_name`,
+    scope
+  );
   const requested = intOrNull(req.query.location_id);
   const locationId = requested || locations.rows[0]?.location_id || null;
   let rows = [];
@@ -67,9 +78,10 @@ router.get('/reports/withdrawal-matrix', asyncRoute(async (req, res) => {
          ON w.atm_id = a.atm_id
         AND ${lastEightWeeks('w.withdrawal_date')}
        WHERE b.location_id = $1
+         AND a.atm_id IN (${atmScopeSql(2)})
        GROUP BY a.atm_id
        ORDER BY a.atm_code`,
-      [locationId]
+      [locationId, ...scope]
     );
     rows = result.rows;
   }
@@ -101,8 +113,9 @@ router.get('/reports/downtime-by-location', asyncRoute(async (req, res) => {
                   ROUND(SUM(downtime_minutes)::numeric, 0) AS downtime_minutes,
                   COUNT(*) FILTER (WHERE downtime_pct > 5)::int AS atms_above_5
            FROM v_atm_downtime_mtd
+           WHERE atm_id IN (${atmScopeSql(1)})
            GROUP BY location_id, location_name, city, region
-           ORDER BY avg_downtime_pct DESC, location_name`),
+           ORDER BY avg_downtime_pct DESC, location_name`, scopeBinds(req.user)),
     query(`SELECT l.location_name, d.reason,
                   ROUND(SUM(
                     GREATEST(EXTRACT(EPOCH FROM (
@@ -116,8 +129,9 @@ router.get('/reports/downtime-by-location', asyncRoute(async (req, res) => {
            JOIN locations l ON l.location_id = b.location_id
            WHERE d.started_at < CURRENT_TIMESTAMP
              AND COALESCE(d.ended_at, CURRENT_TIMESTAMP) > date_trunc('month', CURRENT_TIMESTAMP)
+             AND a.atm_id IN (${atmScopeSql(1)})
            GROUP BY l.location_name, l.location_id, d.reason
-           ORDER BY l.location_name, minutes DESC`),
+           ORDER BY l.location_name, minutes DESC`, scopeBinds(req.user)),
   ]);
   const maxDowntime = summary.rows.reduce((top, row) => Math.max(top, Number(row.avg_downtime_pct) || 0), 0);
   renderPage(req, res, 'report-downtime-location', {
@@ -128,54 +142,66 @@ router.get('/reports/downtime-by-location', asyncRoute(async (req, res) => {
   });
 }));
 
+const SLA_BREACH = `(
+  EXTRACT(EPOCH FROM (COALESCE(ft.responded_at, CASE WHEN ft.status = 'closed' THEN ft.closed_at ELSE CURRENT_TIMESTAMP END) - ft.opened_at)) / 3600.0 > s.response_hours
+  OR EXTRACT(EPOCH FROM (COALESCE(ft.resolved_at, ft.closed_at, CURRENT_TIMESTAMP) - ft.opened_at)) / 3600.0 > s.resolution_hours
+)`;
+
 router.get('/reports/sla', asyncRoute(async (req, res) => {
-  const [targets, byCategory, byLocation, byEngineer] = await Promise.all([
+  const scope = scopeBinds(req.user);
+  const scoped = `ft.atm_id IN (${atmScopeSql(1)})`;
+  const [targets, byCategory, byLocation, byEngineer, breaches] = await Promise.all([
     query('SELECT category, response_hours, resolution_hours FROM sla_targets ORDER BY category'),
-    query(`SELECT sla_category(ft.category) AS category,
+    query(`SELECT ft.category,
                   COUNT(*)::int AS tickets,
-                  COUNT(*) FILTER (WHERE
-                    EXTRACT(EPOCH FROM (COALESCE(ft.responded_at, CASE WHEN ft.status = 'closed' THEN ft.closed_at ELSE CURRENT_TIMESTAMP END) - ft.opened_at)) / 3600
-                      > s.response_hours
-                    OR EXTRACT(EPOCH FROM (COALESCE(ft.resolved_at, ft.closed_at, CURRENT_TIMESTAMP) - ft.opened_at)) / 3600
-                      > s.resolution_hours
-                  )::int AS breaches
+                  COUNT(*) FILTER (WHERE ${SLA_BREACH})::int AS breaches
            FROM fault_tickets ft
            JOIN sla_targets s ON s.category = sla_category(ft.category)
-           GROUP BY 1
-           ORDER BY 1`),
+           WHERE ${scoped}
+           GROUP BY ft.category
+           ORDER BY ft.category`, scope),
     query(`SELECT l.location_name,
                   COUNT(*)::int AS tickets,
-                  COUNT(*) FILTER (WHERE
-                    EXTRACT(EPOCH FROM (COALESCE(ft.resolved_at, ft.closed_at, CURRENT_TIMESTAMP) - ft.opened_at)) / 3600
-                      > s.resolution_hours
-                  )::int AS breaches
+                  COUNT(*) FILTER (WHERE ${SLA_BREACH})::int AS breaches
            FROM fault_tickets ft
            JOIN sla_targets s ON s.category = sla_category(ft.category)
            JOIN atms a ON a.atm_id = ft.atm_id
            JOIN branches b ON b.branch_id = a.branch_id
            JOIN locations l ON l.location_id = b.location_id
+           WHERE ${scoped}
            GROUP BY l.location_name
-           ORDER BY breaches DESC, l.location_name
-           LIMIT 20`),
+           ORDER BY breaches DESC, l.location_name`, scope),
     query(`SELECT COALESCE(e.full_name, 'Unassigned') AS engineer_name,
                   COUNT(*)::int AS tickets,
-                  COUNT(*) FILTER (WHERE
-                    EXTRACT(EPOCH FROM (COALESCE(ft.resolved_at, ft.closed_at, CURRENT_TIMESTAMP) - ft.opened_at)) / 3600
-                      > s.resolution_hours
-                  )::int AS breaches
+                  COUNT(*) FILTER (WHERE ${SLA_BREACH})::int AS breaches
            FROM fault_tickets ft
            JOIN sla_targets s ON s.category = sla_category(ft.category)
            LEFT JOIN engineers e ON e.engineer_id = ft.engineer_id
+           WHERE ${scoped}
            GROUP BY e.full_name
-           ORDER BY breaches DESC, engineer_name
-           LIMIT 20`),
+           ORDER BY breaches DESC, engineer_name`, scope),
+    query(`SELECT ft.ticket_id, ft.ticket_no, ft.category, ft.status, ft.opened_at,
+                  a.atm_code, l.location_name, COALESCE(e.full_name, 'Unassigned') AS engineer_name
+           FROM fault_tickets ft
+           JOIN sla_targets s ON s.category = sla_category(ft.category)
+           JOIN atms a ON a.atm_id = ft.atm_id
+           JOIN branches b ON b.branch_id = a.branch_id
+           JOIN locations l ON l.location_id = b.location_id
+           LEFT JOIN engineers e ON e.engineer_id = ft.engineer_id
+           WHERE ${scoped} AND ${SLA_BREACH}
+           ORDER BY ft.opened_at`, scope),
   ]);
+  const listed = breaches.rows.length;
+  const summed = byCategory.rows.reduce((sum, row) => sum + Number(row.breaches), 0);
   renderPage(req, res, 'sla-report', {
     title: 'SLA Report',
     targets: targets.rows,
     byCategory: byCategory.rows,
     byLocation: byLocation.rows,
     byEngineer: byEngineer.rows,
+    breaches: breaches.rows,
+    breachTotal: summed,
+    breachListMatches: listed === summed,
     canEdit: req.user.role === 'super_admin',
   });
 }));
@@ -214,7 +240,9 @@ router.get('/reports/recon-ageing', asyncRoute(async (req, res) => {
      JOIN branches b ON b.branch_id = a.branch_id
      JOIN locations l ON l.location_id = b.location_id
      WHERE r.case_status IN ('raised', 'investigating')
-     ORDER BY r.created_at`
+       AND a.atm_id IN (${atmScopeSql(1)})
+     ORDER BY r.created_at`,
+    scopeBinds(req.user)
   );
   const buckets = { under2: 0, under7: 0, under14: 0, older: 0 };
   for (const row of rows.rows) {
@@ -226,4 +254,4 @@ router.get('/reports/recon-ageing', asyncRoute(async (req, res) => {
   renderPage(req, res, 'recon-ageing', { title: 'Open Case Ageing', rows: rows.rows, buckets });
 }));
 
-module.exports = router;
+module.exports = guard(router, 'reports');

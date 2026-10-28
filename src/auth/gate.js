@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const express = require('express');
 const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const { pool, query } = require('../db');
@@ -102,6 +103,22 @@ function requireCan(action) {
   };
 }
 
+function guard(router, action) {
+  const check = requireCan(action);
+  const wrap = express.Router();
+  wrap.use((req, res, next) => {
+    const method = req.method.toLowerCase();
+    const handled = router.stack.some((layer) => {
+      if (!layer.route || !layer.route.methods[method]) return false;
+      return layer.match(req.path);
+    });
+    if (!handled) return next('router');
+    return check(req, res, next);
+  });
+  wrap.use(router);
+  return wrap;
+}
+
 function requireAny(...actions) {
   return (req, res, next) => {
     if (actions.some((action) => can(req.user, action))) return next();
@@ -152,6 +169,11 @@ function installAuth(app) {
   app.use(requireLogin);
 
   app.use((req, res, next) => {
+    if (req.user) res.setHeader('Cache-Control', 'no-store');
+    next();
+  });
+
+  app.use((req, res, next) => {
     res.on('finish', () => {
       if (!req.user) return;
       const outcome = res.locals.accessDenied || res.statusCode === 403 ? 'denied' : 'allowed';
@@ -183,6 +205,7 @@ module.exports = {
   installAuth,
   requireCan,
   requireAny,
+  guard,
   deny,
   csrfOk,
   tooManyLoginAttempts,

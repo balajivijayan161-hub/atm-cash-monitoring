@@ -1,13 +1,12 @@
 const express = require('express');
 const { query, withTransaction } = require('../db');
 const { asyncRoute, renderPage, intOrNull, isIsoDate, inr, parseLedgerAmount, ledgerAmountError } = require('../http');
-const { requireCan, deny } = require('../auth/gate');
-const { can } = require('../auth/permissions');
+const { requireCan, deny, guard } = require('../auth/gate');
+const { can, scopeBinds, atmScopeSql } = require('../auth/permissions');
 const { recordChange } = require('../auth/activity');
 const { REASONS, caseChangeError } = require('../services/reconCase');
 
 const router = express.Router();
-router.use(requireCan('recons'));
 
 router.get('/reconciliations', asyncRoute(async (req, res) => {
   const rows = await query(
@@ -17,8 +16,10 @@ router.get('/reconciliations', asyncRoute(async (req, res) => {
      FROM reconciliations r
      JOIN atms a ON a.atm_id = r.atm_id
      LEFT JOIN fault_tickets ft ON ft.reconciliation_id = r.reconciliation_id
+     WHERE a.atm_id IN (${atmScopeSql(1)})
      ORDER BY r.created_at DESC
-     LIMIT 40`
+     LIMIT 40`,
+    scopeBinds(req.user)
   );
   renderPage(req, res, 'reconciliations', { title: 'Reconciliations', rows: rows.rows });
 }));
@@ -217,15 +218,22 @@ router.post('/reconciliations/:id/status', asyncRoute(async (req, res) => {
   });
   if (error) return res.redirect(`/reconciliations/${id}?warning=${encodeURIComponent(error)}`);
   const closing = to === 'resolved' || to === 'written_off';
+  const allowed = await query(
+    `SELECT 1 FROM reconciliations r
+     JOIN atms a ON a.atm_id = r.atm_id
+     WHERE r.reconciliation_id = $1 AND a.atm_id IN (${atmScopeSql(2)})`,
+    [id, ...scopeBinds(req.user)]
+  );
+  if (!allowed.rowCount) return deny(req, res);
   await query(
     `UPDATE reconciliations
-     SET case_status = $2,
-         reason_code = CASE WHEN $2 IN ('resolved', 'written_off') THEN $3 ELSE reason_code END,
-         assignee_id = COALESCE($4, assignee_id),
-         closed_by = CASE WHEN $5 THEN $6 ELSE closed_by END,
-         closed_at = CASE WHEN $5 THEN CURRENT_TIMESTAMP ELSE closed_at END
+     SET case_status = $2::varchar,
+         reason_code = CASE WHEN $3::boolean THEN NULLIF($4, '')::varchar ELSE reason_code END,
+         assignee_id = COALESCE($5::int, assignee_id),
+         closed_by = CASE WHEN $3::boolean THEN $6::int ELSE closed_by END,
+         closed_at = CASE WHEN $3::boolean THEN CURRENT_TIMESTAMP ELSE closed_at END
      WHERE reconciliation_id = $1`,
-    [id, to, reason || null, assignee, closing, req.user.user_id]
+    [id, to, closing, reason || '', assignee, req.user.user_id]
   );
   await recordChange(req, {
     action: closing ? 'approve' : 'update',
@@ -237,4 +245,4 @@ router.post('/reconciliations/:id/status', asyncRoute(async (req, res) => {
   res.redirect(`/reconciliations/${id}?notice=Case updated.`);
 }));
 
-module.exports = router;
+module.exports = guard(router, 'recons');

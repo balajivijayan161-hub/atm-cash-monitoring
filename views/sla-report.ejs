@@ -20,6 +20,28 @@
   </form>
 <% }) %>
 <section class="section">
+  <h2>Breaches</h2>
+  <p class="hint"><%= breachTotal %> ticket<%= breachTotal === 1 ? '' : 's' %> past a response or resolution target.</p>
+  <div class="table-wrap">
+    <table class="stack-rows">
+      <thead><tr><th>Ticket</th><th>ATM</th><th>Category</th><th>Location</th><th>Engineer</th><th>Status</th></tr></thead>
+      <tbody>
+        <% if (!breaches.length) { %><tr><td colspan="6" class="empty">No breaches.</td></tr><% } %>
+        <% breaches.forEach((row) => { %>
+          <tr>
+            <td data-label="Ticket"><a href="/tickets?ticket=<%= row.ticket_id %>"><%= row.ticket_no %></a></td>
+            <td data-label="ATM"><%= row.atm_code %></td>
+            <td data-label="Category"><%= label(row.category) %></td>
+            <td data-label="Location"><%= row.location_name %></td>
+            <td data-label="Engineer"><%= row.engineer_name %></td>
+            <td data-label="Status"><%= label(row.status) %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</section>
+<section class="section">
   <h2>By Category</h2>
   <div class="table-wrap">
     <table>

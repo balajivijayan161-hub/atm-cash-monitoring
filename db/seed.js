@@ -320,7 +320,7 @@ async function seedIfEmpty(client) {
           const run = await client.query(
             `INSERT INTO replenishment_runs
                (van_id, custodian_id, location_id, planned_date, status, notes, created_by)
-             VALUES ($1, $2, $3, $4, 'completed', 'Weekly replenishment — seeded history.', 'seed')
+             VALUES ($1, $2, $3, $4, 'completed', 'Weekly replenishment — earlier history.', 'seed')
              RETURNING run_id`,
             [vanIds[locIndex][slot], custodian.rows[0].custodian_id, locationIds[locIndex], runDate]
           );

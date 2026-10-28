@@ -16,6 +16,7 @@ async function boot() {
     await closeLiveFeedDowntime(client);
     await seedAccessUsers(client);
     await client.query('COMMIT');
+    await pool.query('DELETE FROM session WHERE expire < NOW()');
     if (seeded) console.log('Sample ledger committed.');
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch (rollbackErr) { /* session may already be clear */ }
@@ -34,6 +35,10 @@ async function main() {
     console.log(`ATM cash operations listening on ${port}`);
   });
   startInboundPoller();
+  const pruneTimer = setInterval(() => {
+    pool.query('DELETE FROM session WHERE expire < NOW()').catch((err) => console.error(err));
+  }, 15 * 60 * 1000);
+  if (typeof pruneTimer.unref === 'function') pruneTimer.unref();
   const shutdown = () => {
     stopInboundPoller();
     stopSimulator();

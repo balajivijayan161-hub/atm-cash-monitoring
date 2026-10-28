@@ -99,11 +99,18 @@
       <p class="total-label">Total loaded</p>
       <p id="total-loaded" class="total-value" aria-live="polite"><%= inr(total) %></p>
       <p class="hint">Sum of denomination × note count on every cassette row.</p>
+      <% if (run && run.approval_status && run.approval_status !== 'approved') { %><p class="hint">Waiting for approval before it can be dispatched or completed.</p><% } %>
       <% if (run && run.created_by) { %><p class="hint">Created by <%= run.created_by === 'plan_replenishment_routes' ? 'Route Planner' : 'Operator' %>.</p><% } %>
       <p style="margin-top:14px"><button class="btn btn-primary" type="submit">Save Run</button></p>
     </aside>
   </div>
 </form>
+<% if (run && run.approval_status && run.approval_status !== 'approved' && can.approveRuns) { %>
+  <form method="post" action="/runs/<%= run.run_id %>/approve" style="margin-top:16px">
+    <%- csrfField %>
+    <button class="btn btn-primary" type="submit">Approve Run</button>
+  </form>
+<% } %>
 <% if (run) { %>
   <% if (can.deleteRun) { %><form method="post" action="/runs/<%= run.run_id %>/delete" style="margin-top:16px" onsubmit="return confirm('Delete this run and its cassette loads?');">
     <%- csrfField %>

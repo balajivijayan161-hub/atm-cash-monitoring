@@ -2,14 +2,14 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 
 const ROUNDS = 10;
+const DUMMY_HASH = bcrypt.hashSync('invalid-login-placeholder', ROUNDS);
 
 function hashPassword(password) {
   return bcrypt.hash(String(password), ROUNDS);
 }
 
 function checkPassword(password, hash) {
-  if (!hash) return false;
-  return bcrypt.compare(String(password), hash);
+  return bcrypt.compare(String(password || ''), hash || DUMMY_HASH);
 }
 
 function secretMatch(left, right) {

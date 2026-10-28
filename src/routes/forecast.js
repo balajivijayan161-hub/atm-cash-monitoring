@@ -1,14 +1,14 @@
 const express = require('express');
 const { query } = require('../db');
 const { asyncRoute, renderPage, intOrNull, isIsoDate } = require('../http');
-const { requireCan, deny } = require('../auth/gate');
+const { deny, guard } = require('../auth/gate');
+const { scopeBinds, atmScopeSql } = require('../auth/permissions');
 const { recordChange } = require('../auth/activity');
 const { loadReference } = require('../services/reference');
 const { loadSuggestion } = require('../services/denom');
 const { mape } = require('../services/calendar');
 
 const router = express.Router();
-router.use(requireCan('forecast'));
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 function weekdayName(iso) {
@@ -41,6 +41,11 @@ router.get('/forecast', asyncRoute(async (req, res) => {
       ]);
       if (!atm.rowCount) error = 'That ATM was not found.';
       else {
+        const allowed = await query(
+          `SELECT 1 FROM atms a WHERE a.atm_id = $1 AND a.atm_id IN (${atmScopeSql(2)})`,
+          [atmId, ...scopeBinds(req.user)]
+        );
+        if (!allowed.rowCount) return deny(req, res);
         const forecastAmount = Number(forecast.rows[0].forecast);
         const current = Number(atm.rows[0].current_cash);
         const factor = await query('SELECT forecast_multiplier($1::date) AS factor', [targetDate]);
@@ -157,4 +162,4 @@ router.post('/forecast/calendar', asyncRoute(async (req, res) => {
   res.redirect('/forecast/calendar?notice=Holiday saved.');
 }));
 
-module.exports = router;
+module.exports = guard(router, 'forecast');

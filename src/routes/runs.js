@@ -1,8 +1,8 @@
 const express = require('express');
 const { query, withTransaction } = require('../db');
 const { asyncRoute, renderPage, intOrNull, isIsoDate, pageWindow } = require('../http');
-const { requireCan, requireAny, deny } = require('../auth/gate');
-const { can } = require('../auth/permissions');
+const { requireCan, requireAny, deny, guard } = require('../auth/gate');
+const { can, scopeBinds, runScopeSql } = require('../auth/permissions');
 const { recordChange } = require('../auth/activity');
 const { loadReference } = require('../services/reference');
 const { loadSuggestion } = require('../services/denom');
@@ -10,7 +10,6 @@ const { saveRun } = require('../services/runs');
 const { totalLoaded } = require('../../public/js/money');
 
 const router = express.Router();
-router.use(requireCan('runs'));
 const STATUSES = ['planned', 'in_progress', 'completed', 'cancelled'];
 const PAGE_SIZE = 20;
 
@@ -22,11 +21,12 @@ router.get('/runs', asyncRoute(async (req, res) => {
   const status = STATUSES.includes(req.query.status) ? req.query.status : '';
   const plannedDate = isIsoDate(req.query.date || '') ? req.query.date : '';
   const locationId = intOrNull(req.query.location_id);
-  const filters = [status || null, plannedDate || null, locationId];
+  const filters = [status || null, plannedDate || null, locationId, ...scopeBinds(req.user)];
   const where = `
     WHERE ($1::text IS NULL OR rr.status = $1)
       AND ($2::date IS NULL OR rr.planned_date = $2)
-      AND ($3::int IS NULL OR rr.location_id = $3)`;
+      AND ($3::int IS NULL OR rr.location_id = $3)
+      AND ${runScopeSql('rr', 4)}`;
   const [count, locations, dates, plans] = await Promise.all([
     query(`SELECT COUNT(*)::int AS total FROM replenishment_runs rr ${where}`, filters),
     query('SELECT location_id, location_name FROM locations ORDER BY location_name'),
@@ -52,7 +52,7 @@ router.get('/runs', asyncRoute(async (req, res) => {
      ${where}
      GROUP BY rr.run_id, l.location_id, l.location_name, cv.van_id, cv.van_code, cu.custodian_id, cu.full_name
      ORDER BY rr.planned_date DESC, rr.run_id DESC
-     LIMIT $4 OFFSET $5`,
+     LIMIT $8 OFFSET $9`,
     [...filters, window.pageSize, window.offset]
   );
   renderPage(req, res, 'runs', {
@@ -98,6 +98,13 @@ router.post('/runs/plan', requireCan('planRuns'), asyncRoute(async (req, res) =>
     [plannedDate]
   );
   const row = log.rows[0] || { runs_created: 0, atms_assigned: 0 };
+  await recordChange(req, {
+    action: 'create',
+    entity: 'replenishment plan',
+    entityId: plannedDate,
+    before: null,
+    after: { date: plannedDate, runs: row.runs_created, atms: row.atms_assigned, location_id: locationId },
+  });
   const notice = row.atms_assigned
     ? `Planned ${row.runs_created} run${row.runs_created === 1 ? '' : 's'} covering ${row.atms_assigned} ATMs for ${plannedDate}.`
     : `No new stops for ${plannedDate}. Forecast cash does not exceed remaining cash, or those ATMs are already on a run.`;
@@ -141,7 +148,16 @@ router.get('/runs/new', requireCan('createRun'), asyncRoute(async (req, res) => 
   });
 }));
 
+function needsApproval(user, status, approvalStatus) {
+  if (status !== 'in_progress' && status !== 'completed') return false;
+  if (can(user, 'approveRuns')) return false;
+  return approvalStatus !== 'approved';
+}
+
 router.post('/runs', requireCan('createRun'), asyncRoute(async (req, res) => {
+  if (needsApproval(req.user, req.body.status, null)) {
+    return res.redirect('/runs/new?warning=This run has to be approved before it can be dispatched or completed.');
+  }
   const saved = await withTransaction((client) => saveRun(client, req.body, null));
   if (saved.errors) {
     const ref = await loadReference();
@@ -174,10 +190,14 @@ router.get('/runs/:id', asyncRoute(async (req, res, next) => {
   if (req.params.id === 'new') return next();
   const id = intOrNull(req.params.id);
   if (!id) return renderPage(req, res, 'not-found', { title: 'Run Not Found', statusCode: 404 });
+  const visible = await query(
+    `SELECT 1 FROM replenishment_runs rr WHERE rr.run_id = $1 AND ${runScopeSql('rr', 2)}`,
+    [id, ...scopeBinds(req.user)]
+  );
   const [run, loads, ref] = await Promise.all([
     query(
       `SELECT run_id, van_id, custodian_id, location_id, planned_date::text AS planned_date,
-              status, notes, created_by
+              status, notes, created_by, approval_status
        FROM replenishment_runs WHERE run_id = $1`,
       [id]
     ),
@@ -192,6 +212,7 @@ router.get('/runs/:id', asyncRoute(async (req, res, next) => {
     loadReference(),
   ]);
   if (!run.rowCount) return renderPage(req, res, 'not-found', { title: 'Run Not Found', statusCode: 404 });
+  if (!visible.rowCount) return deny(req, res);
   const lines = loads.rows.map((row) => ({
     atmCode: row.atm_code,
     cassette: row.cassette_number,
@@ -222,9 +243,16 @@ router.get('/runs/:id', asyncRoute(async (req, res, next) => {
 router.post('/runs/:id', requireAny('editRun', 'editOwnRun'), asyncRoute(async (req, res) => {
   const id = intOrNull(req.params.id);
   if (!id) return renderPage(req, res, 'not-found', { title: 'Run Not Found', statusCode: 404 });
-  if (req.user.role === 'custodian') {
-    const owned = await query('SELECT 1 FROM replenishment_runs WHERE run_id = $1 AND custodian_id = $2', [id, req.user.custodian_id]);
-    if (!owned.rowCount) return deny(req, res);
+  const existing = await query(
+    `SELECT rr.status, rr.approval_status, rr.planned_date::text AS planned_date, rr.van_id, rr.custodian_id,
+            rr.location_id, rr.notes
+     FROM replenishment_runs rr
+     WHERE rr.run_id = $1 AND ${runScopeSql('rr', 2)}`,
+    [id, ...scopeBinds(req.user)]
+  );
+  if (!existing.rowCount) return deny(req, res);
+  if (needsApproval(req.user, req.body.status, existing.rows[0].approval_status)) {
+    return res.redirect(`/runs/${id}?warning=This run has to be approved before it can be dispatched or completed.`);
   }
   const saved = await withTransaction((client) => saveRun(client, req.body, id));
   if (saved.errors) {
@@ -241,7 +269,43 @@ router.post('/runs/:id', requireAny('editRun', 'editOwnRun'), asyncRoute(async (
       statusCode: 400,
     });
   }
+  const after = await query(
+    `SELECT status, planned_date::text AS planned_date, van_id, custodian_id, location_id, notes
+     FROM replenishment_runs WHERE run_id = $1`,
+    [id]
+  );
+  await recordChange(req, {
+    action: 'update',
+    entity: 'replenishment run',
+    entityId: id,
+    before: existing.rows[0],
+    after: { ...after.rows[0], total: saved.total },
+  });
   res.redirect(`/runs/${id}?notice=${encodeURIComponent('Run updated. Total loaded ' + saved.total + '.')}`);
+}));
+
+router.post('/runs/:id/approve', requireCan('approveRuns'), asyncRoute(async (req, res) => {
+  const id = intOrNull(req.params.id);
+  if (!id) return res.redirect('/runs?warning=That run was not found.');
+  const existing = await query(
+    `SELECT approval_status FROM replenishment_runs rr WHERE rr.run_id = $1 AND ${runScopeSql('rr', 2)}`,
+    [id, ...scopeBinds(req.user)]
+  );
+  if (!existing.rowCount) return deny(req, res);
+  await query(
+    `UPDATE replenishment_runs
+     SET approval_status = 'approved', approved_at = CURRENT_TIMESTAMP, approved_by = $2
+     WHERE run_id = $1`,
+    [id, req.user.user_id]
+  );
+  await recordChange(req, {
+    action: 'approve',
+    entity: 'replenishment run',
+    entityId: id,
+    before: { approval_status: existing.rows[0].approval_status },
+    after: { approval_status: 'approved' },
+  });
+  res.redirect(`/runs/${id}?notice=Run approved.`);
 }));
 
 router.post('/runs/:id/delete', requireCan('deleteRun'), asyncRoute(async (req, res) => {
@@ -259,4 +323,4 @@ router.post('/runs/:id/delete', requireCan('deleteRun'), asyncRoute(async (req, 
   res.redirect('/runs?notice=Replenishment run deleted.');
 }));
 
-module.exports = router;
+module.exports = guard(router, 'runs');

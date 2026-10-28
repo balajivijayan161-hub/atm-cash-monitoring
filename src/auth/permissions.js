@@ -81,6 +81,25 @@ function atmScopeSql(start) {
       ))`;
 }
 
+function runScopeSql(alias, start) {
+  const region = start;
+  const branch = start + 1;
+  const custodian = start + 2;
+  const engineer = start + 3;
+  return `($${engineer}::int IS NULL AND ($${region}::text IS NULL OR EXISTS (
+      SELECT 1 FROM locations sl WHERE sl.location_id = ${alias}.location_id AND sl.region = $${region}
+    )) AND ($${branch}::int IS NULL OR EXISTS (
+      SELECT 1 FROM cassette_loads cl
+      JOIN atms sa ON sa.atm_id = cl.atm_id
+      WHERE cl.run_id = ${alias}.run_id AND sa.branch_id = $${branch}
+    ) OR (
+      NOT EXISTS (SELECT 1 FROM cassette_loads cl WHERE cl.run_id = ${alias}.run_id)
+      AND EXISTS (
+        SELECT 1 FROM branches sb WHERE sb.branch_id = $${branch} AND sb.location_id = ${alias}.location_id
+      )
+    )) AND ($${custodian}::int IS NULL OR ${alias}.custodian_id = $${custodian}))`;
+}
+
 module.exports = {
   ROLE_LABELS,
   roleLabel,
@@ -88,4 +107,5 @@ module.exports = {
   permissionFlags,
   scopeBinds,
   atmScopeSql,
+  runScopeSql,
 };

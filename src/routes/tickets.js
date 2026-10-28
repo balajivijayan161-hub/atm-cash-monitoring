@@ -1,11 +1,11 @@
 const express = require('express');
 const { query } = require('../db');
 const { asyncRoute, renderPage, intOrNull, pageWindow } = require('../http');
-const { requireCan } = require('../auth/gate');
+const { requireCan, deny, guard } = require('../auth/gate');
+const { scopeBinds, atmScopeSql } = require('../auth/permissions');
 const { recordChange } = require('../auth/activity');
 
 const router = express.Router();
-router.use(requireCan('tickets'));
 const PAGE_SIZE = 80;
 const STATUSES = ['open', 'assigned', 'closed'];
 const CATEGORIES = ['cash_variance', 'cash_out', 'hardware', 'communication', 'cassette_error'];
@@ -14,9 +14,11 @@ router.get('/tickets', asyncRoute(async (req, res) => {
   const status = STATUSES.includes(req.query.status) ? req.query.status : '';
   const category = CATEGORIES.includes(req.query.category) ? req.query.category : '';
   const focusId = intOrNull(req.query.ticket);
-  const filters = [status || null, category || null];
+  const filters = [status || null, category || null, ...scopeBinds(req.user)];
   const where = `WHERE ($1::text IS NULL OR ft.status = $1)
-         AND ($2::text IS NULL OR ft.category = $2)`;
+         AND ($2::text IS NULL OR ft.category = $2)
+         AND ft.atm_id IN (${atmScopeSql(3)})
+         AND ($6::int IS NULL OR ft.engineer_id = $6)`;
   const count = await query(
     `SELECT COUNT(*)::int AS total
      FROM fault_tickets ft
@@ -35,10 +37,10 @@ router.get('/tickets', asyncRoute(async (req, res) => {
        JOIN locations l ON l.location_id = b.location_id
        LEFT JOIN engineers e ON e.engineer_id = ft.engineer_id
        ${where}
-       ORDER BY (ft.ticket_id = $3::int) DESC,
+       ORDER BY (ft.ticket_id = $7::int) DESC,
                 CASE ft.status WHEN 'open' THEN 0 WHEN 'assigned' THEN 1 ELSE 2 END,
                 ft.opened_at DESC
-       LIMIT $4 OFFSET $5`,
+       LIMIT $8 OFFSET $9`,
       [...filters, focusId, PAGE_SIZE, window.offset]
     ),
     query(`SELECT engineer_id, full_name, specialty FROM engineers WHERE active ORDER BY full_name`),
@@ -63,8 +65,16 @@ router.post('/tickets/:id/assign', requireCan('assignTickets'), asyncRoute(async
   const engineerText = req.body.engineer_id == null ? '' : String(req.body.engineer_id).trim();
   if (!engineerText) return res.redirect('/tickets?warning=Choose an engineer before assigning the ticket.');
   if (!engineerId) return res.redirect('/tickets?warning=Engineer not found.');
-  const ticket = await query('SELECT status FROM fault_tickets WHERE ticket_id = $1', [id]);
-  if (!ticket.rowCount) return res.redirect('/tickets?warning=Ticket not found.');
+  const ticket = await query(
+    `SELECT ft.status, ft.engineer_id FROM fault_tickets ft
+     WHERE ft.ticket_id = $1 AND ft.atm_id IN (${atmScopeSql(2)})`,
+    [id, ...scopeBinds(req.user)]
+  );
+  if (!ticket.rowCount) {
+    const exists = await query('SELECT 1 FROM fault_tickets WHERE ticket_id = $1', [id]);
+    if (!exists.rowCount) return res.redirect('/tickets?warning=Ticket not found.');
+    return deny(req, res);
+  }
   if (ticket.rows[0].status === 'closed') return res.redirect('/tickets?warning=That ticket is already closed.');
   const engineer = await query('SELECT 1 FROM engineers WHERE engineer_id = $1 AND active', [engineerId]);
   if (!engineer.rowCount) return res.redirect('/tickets?warning=Engineer not found.');
@@ -93,8 +103,18 @@ router.post('/tickets/:id/assign', requireCan('assignTickets'), asyncRoute(async
 router.post('/tickets/:id/close', asyncRoute(async (req, res) => {
   const id = intOrNull(req.params.id);
   if (!id) return res.redirect('/tickets?warning=Ticket not found.');
-  const ticket = await query('SELECT status FROM fault_tickets WHERE ticket_id = $1', [id]);
-  if (!ticket.rowCount) return res.redirect('/tickets?warning=Ticket not found.');
+  const ticket = await query(
+    `SELECT ft.status, ft.engineer_id FROM fault_tickets ft
+     WHERE ft.ticket_id = $1
+       AND ft.atm_id IN (${atmScopeSql(2)})
+       AND ($5::int IS NULL OR ft.engineer_id = $5)`,
+    [id, ...scopeBinds(req.user)]
+  );
+  if (!ticket.rowCount) {
+    const exists = await query('SELECT 1 FROM fault_tickets WHERE ticket_id = $1', [id]);
+    if (!exists.rowCount) return res.redirect('/tickets?warning=Ticket not found.');
+    return deny(req, res);
+  }
   if (ticket.rows[0].status === 'closed') return res.redirect('/tickets?warning=That ticket is already closed.');
   const resolution = String(req.body.resolution || '').trim().slice(0, 2000);
   const result = await query(
@@ -118,4 +138,4 @@ router.post('/tickets/:id/close', asyncRoute(async (req, res) => {
   res.redirect(`/tickets?notice=${encodeURIComponent(result.rows[0].ticket_no + ' closed.')}`);
 }));
 
-module.exports = router;
+module.exports = guard(router, 'tickets');

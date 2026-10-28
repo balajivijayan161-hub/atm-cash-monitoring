@@ -2,20 +2,36 @@ const express = require('express');
 const { query } = require('../db');
 const { asyncRoute, renderPage, intOrNull, pageWindow, batchName } = require('../http');
 
-const { requireCan } = require('../auth/gate');
+const { deny, guard } = require('../auth/gate');
+const { scopeBinds, atmScopeSql } = require('../auth/permissions');
 const router = express.Router();
-router.use(requireCan('importData'));
 const PAGE_SIZE = 80;
 
+function importScope(start) {
+  return `(EXISTS (
+    SELECT 1 FROM switch_import_rows r
+    JOIN atms a ON a.atm_code = r.atm_code
+    WHERE r.batch_id = b.batch_id AND a.atm_id IN (${atmScopeSql(start)})
+  ) OR NOT EXISTS (
+    SELECT 1 FROM switch_import_rows r
+    WHERE r.batch_id = b.batch_id AND r.atm_code IS NOT NULL
+  ))`;
+}
+
 router.get('/imports', asyncRoute(async (req, res) => {
-  const count = await query('SELECT COUNT(*)::int AS total FROM switch_import_batches');
+  const scope = scopeBinds(req.user);
+  const count = await query(
+    `SELECT COUNT(*)::int AS total FROM switch_import_batches b WHERE ${importScope(1)}`,
+    scope
+  );
   const window = pageWindow(req.query.page, PAGE_SIZE, count.rows[0].total);
   const rows = await query(
     `SELECT batch_id, filename, source, file_format, uploaded_at, row_count, loaded_count, error_count, status
-     FROM switch_import_batches
+     FROM switch_import_batches b
+     WHERE ${importScope(1)}
      ORDER BY uploaded_at DESC, batch_id DESC
-     LIMIT $1 OFFSET $2`,
-    [PAGE_SIZE, window.offset]
+     LIMIT $5 OFFSET $6`,
+    [...scope, PAGE_SIZE, window.offset]
   );
   renderPage(req, res, 'imports', {
     title: 'Import History',
@@ -43,6 +59,11 @@ router.get('/imports/:id', asyncRoute(async (req, res) => {
     ),
   ]);
   if (!batch.rowCount) return renderPage(req, res, 'not-found', { title: 'Import Not Found', statusCode: 404 });
+  const visible = await query(
+    `SELECT 1 FROM switch_import_batches b WHERE b.batch_id = $1 AND ${importScope(2)}`,
+    [id, ...scopeBinds(req.user)]
+  );
+  if (!visible.rowCount) return deny(req, res);
   renderPage(req, res, 'import-detail', {
     title: batchName(batch.rows[0]),
     batch: batch.rows[0],
@@ -50,4 +71,4 @@ router.get('/imports/:id', asyncRoute(async (req, res) => {
   });
 }));
 
-module.exports = router;
+module.exports = guard(router, 'importData');

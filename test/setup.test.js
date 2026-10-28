@@ -79,7 +79,10 @@ test('first-run setup is one time, and a super admin can set another password', 
   assert.match(saved.location, /Password saved/);
   const clerkIn = await createAgent(base).login('clerk', 'clerk-pass-1');
   assert.equal(clerkIn.status, 302);
-  await seedAccessUsers();
+  await pool.query(
+    `UPDATE users SET password_hash = $1 WHERE username = 'clerk'`,
+    [await require('../src/auth/password').hashPassword(process.env.DEMO_PASSWORD)]
+  );
 
   const original = await pool.query(`SELECT password_hash FROM users WHERE username = 'superadmin'`);
   process.env.SETUP_TOKEN = 'test-setup-token';
@@ -145,6 +148,5 @@ test('first-run setup is one time, and a super admin can set another password', 
   } finally {
     await pool.query(`UPDATE users SET password_hash = $1 WHERE username = 'superadmin'`, [original.rows[0].password_hash]);
     delete process.env.SETUP_TOKEN;
-    await seedAccessUsers();
   }
 });

@@ -145,6 +145,7 @@ function sourceLabel(value) {
   if (key === 'manual') return 'Manual Upload';
   if (key === 'trigger') return 'Reconciliation';
   if (key === 'monitor') return 'Bank Feed';
+  if (key === 'seed') return 'History';
   return titleCase(key);
 }
 
@@ -176,10 +177,15 @@ function formatLabel(value) {
 
 function pageNumber(page) {
   const text = String(page ?? '').trim();
-  if (!/^[1-9]\d*$/.test(text)) return 1;
-  const parsed = Number(text);
-  if (!Number.isSafeInteger(parsed)) return 1;
-  return parsed;
+  if (/^[1-9]\d*$/.test(text)) {
+    const parsed = Number(text);
+    return Number.isSafeInteger(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+  }
+  if (/^[1-9](?:\.\d+)?e\+?\d+$/i.test(text)) {
+    const parsed = Number(text);
+    if (Number.isFinite(parsed) && parsed >= 1) return Number.MAX_SAFE_INTEGER;
+  }
+  return 1;
 }
 
 function exactDateTime(value) {

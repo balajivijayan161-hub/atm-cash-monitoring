@@ -111,9 +111,9 @@ router.post('/login', async (req, res, next) => {
       [username]
     );
     const account = found.rows[0];
-    const locked = account && lockoutSeconds(account.locked_until) > 0;
+    const locked = account && account.active && lockoutSeconds(account.locked_until) > 0;
+    const match = await checkPassword(password, account && account.active && !locked ? account.password_hash : null);
     if (locked) {
-      const seconds = lockoutSeconds(account.locked_until);
       await writeSessionEvent(null, {
         event: 'lockout',
         userId: account.user_id,
@@ -124,14 +124,8 @@ router.post('/login', async (req, res, next) => {
         sessionId: req.sessionID,
         region: account.region,
       });
-      return loginPage(res, {
-        statusCode: 423,
-        error: `This account is locked. Try again in ${Math.max(1, Math.ceil(seconds / 60))} minutes.`,
-        username,
-        lockSeconds: seconds,
-      });
+      return loginPage(res, { statusCode: 401, error: 'Invalid username or password.', username });
     }
-    const match = account && account.active && await checkPassword(password, account.password_hash);
     if (!match) {
       if (account && account.active) {
         const fails = account.failed_attempts + 1;

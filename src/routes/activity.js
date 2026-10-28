@@ -1,6 +1,6 @@
 const express = require('express');
 const { query } = require('../db');
-const { asyncRoute, renderPage, pageWindow, isIsoDate } = require('../http');
+const { asyncRoute, renderPage, pageWindow, isIsoDate, exactDateTime } = require('../http');
 const { requireCan } = require('../auth/gate');
 const { roleLabel } = require('../auth/permissions');
 
@@ -84,7 +84,7 @@ router.get('/activity/export', requireCan('activity'), asyncRoute(async (req, re
   );
   const lines = ['Time,Type,User,Role,Action,Entity,Record,Summary'];
   for (const row of rows.rows) {
-    const cells = [row.created_at.toISOString(), row.kind, row.username, row.role, row.action, row.entity, row.entity_id, row.summary]
+    const cells = [exactDateTime(row.created_at), row.kind, row.username, row.role, row.action, row.entity, row.entity_id, row.summary]
       .map((value) => `"${String(value == null ? '' : value).replace(/"/g, '""')}"`);
     lines.push(cells.join(','));
   }

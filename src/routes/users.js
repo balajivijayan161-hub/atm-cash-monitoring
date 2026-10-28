@@ -3,6 +3,7 @@ const { query } = require('../db');
 const { asyncRoute, renderPage, intOrNull } = require('../http');
 const { requireCan } = require('../auth/gate');
 const { hashPassword } = require('../auth/password');
+const { endUserSessions } = require('../auth/accounts');
 const { roleLabel } = require('../auth/permissions');
 const { recordChange } = require('../auth/activity');
 
@@ -118,6 +119,7 @@ router.post('/users/:id/password', requireCan('manageUsers'), asyncRoute(async (
      WHERE user_id = $1`,
     [id, await hashPassword(form.password)]
   );
+  await endUserSessions(id);
   await recordChange(req, {
     action: 'update',
     entity: 'user',
@@ -166,6 +168,9 @@ router.post('/users/:id', requireCan('manageUsers'), asyncRoute(async (req, res)
       [id, await hashPassword(form.password)]
     );
   }
+  const roleChanged = (form.role || existing.rows[0].role) !== existing.rows[0].role;
+  const activeChanged = Boolean(form.active) !== Boolean(existing.rows[0].active);
+  if (form.password || roleChanged || activeChanged) await endUserSessions(id);
   await recordChange(req, {
     action: 'update',
     entity: 'user',

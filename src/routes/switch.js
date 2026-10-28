@@ -3,10 +3,10 @@ const multer = require('multer');
 const { query, withTransaction } = require('../db');
 const { asyncRoute, renderPage, intOrNull, batchName } = require('../http');
 const { importSwitchContent } = require('../services/switchImport');
-const { requireCan, csrfOk, deny } = require('../auth/gate');
+const { csrfOk, guard } = require('../auth/gate');
+const { recordChange } = require('../auth/activity');
 
 const router = express.Router();
-router.use(requireCan('importData'));
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -36,7 +36,10 @@ router.post('/switch', (req, res, next) => {
     if (err) {
       req.fileError = 'The file could not be read. The limit is 5 MB.';
     }
-    if (!csrfOk(req)) return deny(req, res);
+    if (!csrfOk(req)) {
+      res.locals.accessDenied = true;
+      return res.status(403).type('html').send('<!DOCTYPE html><html><body><main class="content"><h1>The form expired.</h1><p>Go back, refresh the page, and submit it again.</p></main></body></html>');
+    }
     next();
   });
 }, asyncRoute(async (req, res) => {
@@ -77,6 +80,13 @@ router.post('/switch', (req, res, next) => {
         statusCode: 400,
       });
     }
+    await recordChange(req, {
+      action: 'create',
+      entity: 'bank import',
+      entityId: result.batchId,
+      before: null,
+      after: { accepted: result.loaded, rejected: result.errors, rows: result.rowCount },
+    });
     const notice = result.loaded
       ? `Accepted ${result.loaded} of ${result.rowCount} rows. ${result.errors} rejected.`
       : `Nothing was accepted. ${result.errors} of ${result.rowCount} rows were rejected.`;
@@ -114,4 +124,4 @@ router.get('/switch/:id', asyncRoute(async (req, res) => {
   });
 }));
 
-module.exports = router;
+module.exports = guard(router, 'importData');
