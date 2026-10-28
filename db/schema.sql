@@ -820,13 +820,15 @@ CREATE TABLE IF NOT EXISTS users (
   branch_id INTEGER REFERENCES branches (branch_id),
   custodian_id INTEGER REFERENCES custodians (custodian_id),
   engineer_id INTEGER REFERENCES engineers (engineer_id),
-  password_hash TEXT NOT NULL,
+  password_hash TEXT,
   active BOOLEAN NOT NULL DEFAULT TRUE,
   failed_attempts INTEGER NOT NULL DEFAULT 0,
   locked_until TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS session (
   sid varchar NOT NULL COLLATE "default",

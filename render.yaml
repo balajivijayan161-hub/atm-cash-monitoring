@@ -40,3 +40,5 @@ services:
         sync: false
       - key: DEMO_PASSWORD
         sync: false
+      - key: SETUP_TOKEN
+        sync: false

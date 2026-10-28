@@ -35,8 +35,11 @@
     <label class="field">Engineer Number
       <input name="engineer_id" value="<%= form.engineer_id || '' %>">
     </label>
-    <label class="field"><%= editing ? 'New Password' : 'Password' %>
-      <input name="password" type="password" autocomplete="new-password" <%= editing ? '' : 'required' %>>
+    <label class="field" for="new-password"><%= editing ? 'New password' : 'Password' %>
+      <input id="new-password" name="password" type="password" autocomplete="new-password" <%= editing ? '' : 'required' %>>
+    </label>
+    <label class="field" for="confirm-password">Confirm password
+      <input id="confirm-password" name="password_confirm" type="password" autocomplete="new-password" <%= editing ? '' : 'required' %>>
     </label>
     <label class="check"><input type="checkbox" name="active" <%= form.active ? 'checked' : '' %>> Active</label>
   </div>

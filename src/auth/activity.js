@@ -3,6 +3,7 @@ const { query } = require('../db');
 const PAGE_RULES = [
   [/^\/$/, 'Uptime Dashboard'],
   [/^\/login$/, 'Sign In'],
+  [/^\/setup$/, 'First-Run Setup'],
   [/^\/logout$/, 'Log Out'],
   [/^\/atms\/\d+$/, 'ATM Detail'],
   [/^\/atms$/, 'ATMs'],
@@ -93,6 +94,24 @@ function fieldChanges(before, after) {
     .map((field) => ({ field, before: left[field] == null ? null : left[field], after: right[field] == null ? null : right[field] }));
 }
 
+async function recordUnsignedChange({ username, role, userId, sessionId, action, entity, entityId, changes }) {
+  await query(
+    `INSERT INTO change_log
+       (user_id, username, role, session_id, action, entity, entity_id, changes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
+    [
+      userId || null,
+      String(username || '').slice(0, 40),
+      role || null,
+      sessionId || null,
+      action,
+      entity,
+      entityId == null ? null : String(entityId),
+      JSON.stringify(changes || []),
+    ]
+  );
+}
+
 async function recordChange(req, { action, entity, entityId, before, after, region, branchId }, client) {
   if (!req || !req.user) return;
   const db = client && client.query ? client : { query };
@@ -123,4 +142,5 @@ module.exports = {
   writeSessionEvent,
   fieldChanges,
   recordChange,
+  recordUnsignedChange,
 };

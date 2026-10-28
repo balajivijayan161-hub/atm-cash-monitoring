@@ -1,9 +1,10 @@
 const express = require('express');
 const { query } = require('../db');
-const { checkPassword } = require('./password');
-const { lockoutSeconds } = require('./accounts');
-const { writeSessionEvent, clientIp } = require('./activity');
+const { checkPassword, hashPassword, passwordHints, secretMatch } = require('./password');
+const { lockoutSeconds, setupOpen, envSecret } = require('./accounts');
+const { writeSessionEvent, clientIp, recordUnsignedChange } = require('./activity');
 const { tooManyLoginAttempts, ABSOLUTE_MS } = require('./gate');
+const { renderPage } = require('../http');
 
 const router = express.Router();
 const LOCK_MS = 15 * 60 * 1000;
@@ -21,7 +22,73 @@ function loginPage(res, data) {
 
 router.get('/login', (req, res) => {
   if (req.session.user) return res.redirect('/');
-  return loginPage(res, { reason: req.query.reason === 'expired' ? 'expired' : '' });
+  const reason = req.query.reason === 'expired' ? 'expired' : (req.query.setup === 'done' ? 'ready' : '');
+  return loginPage(res, { reason });
+});
+
+function setupDisabled(res) {
+  return renderPage({ query: {} }, res, 'not-found', { title: 'Page Not Found', statusCode: 404 });
+}
+
+async function logSetup(req, outcome, userId) {
+  await recordUnsignedChange({
+    username: 'superadmin',
+    role: 'super_admin',
+    userId,
+    sessionId: req.sessionID,
+    action: 'update',
+    entity: 'first-run setup',
+    entityId: userId,
+    changes: [{ field: 'result', before: null, after: outcome }],
+  });
+}
+
+router.get('/setup', async (req, res, next) => {
+  try {
+    if (!(await setupOpen())) return setupDisabled(res);
+    return res.render('setup', { error: '', hints: passwordHints('') });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/setup', async (req, res, next) => {
+  try {
+    if (!(await setupOpen())) return setupDisabled(res);
+    const account = await query(
+      `SELECT user_id FROM users WHERE username = 'superadmin' AND password_hash IS NULL`
+    );
+    const userId = account.rows[0] ? account.rows[0].user_id : null;
+    const token = String(req.body.setup_token || '');
+    if (!secretMatch(envSecret('SETUP_TOKEN'), token)) {
+      await logSetup(req, 'rejected', userId);
+      return res.status(401).render('setup', {
+        error: 'The setup token does not match.',
+        hints: passwordHints(req.body.password || ''),
+      });
+    }
+    const password = String(req.body.password || '');
+    const confirm = String(req.body.password_confirm || '');
+    if (password.length < 12 || password !== confirm) {
+      await logSetup(req, 'rejected', userId);
+      return res.status(400).render('setup', {
+        error: password.length < 12 ? 'Use at least 12 characters.' : 'The passwords do not match.',
+        hints: passwordHints(password),
+      });
+    }
+    const saved = await query(
+      `UPDATE users
+       SET password_hash = $1, failed_attempts = 0, locked_until = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE username = 'superadmin' AND password_hash IS NULL
+       RETURNING user_id`,
+      [await hashPassword(password)]
+    );
+    if (!saved.rowCount) return setupDisabled(res);
+    await logSetup(req, 'password set', saved.rows[0].user_id);
+    return res.redirect('/login?setup=done');
+  } catch (err) {
+    return next(err);
+  }
 });
 
 router.post('/login', async (req, res, next) => {

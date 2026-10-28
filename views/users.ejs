@@ -8,7 +8,7 @@
 </header>
 <div class="table-wrap">
   <table class="stack-rows">
-    <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Region</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Region</th><th>Status</th><th>Set Password</th></tr></thead>
     <tbody>
       <% rows.forEach((row) => { %>
         <tr>
@@ -16,8 +16,20 @@
           <td data-label="Username"><%= row.username %></td>
           <td data-label="Role"><%= roleLabel(row.role) %></td>
           <td data-label="Region"><%= row.region || 'All Regions' %></td>
-          <td data-label="Status"><%= row.active ? 'Active' : 'Disabled' %></td>
-          <td data-label="Edit"><a href="/users/<%= row.user_id %>">Edit</a></td>
+          <td data-label="Status"><%= row.active ? 'Active' : 'Disabled' %><% if (!row.has_password) { %><br><span class="hint">No password</span><% } %></td>
+          <td data-label="Set Password">
+            <form method="post" action="/users/<%= row.user_id %>/password">
+              <%- csrfField %>
+              <label class="field" for="new-password-<%= row.user_id %>">New password
+                <input id="new-password-<%= row.user_id %>" name="password" type="password" autocomplete="new-password" required>
+              </label>
+              <label class="field" for="confirm-password-<%= row.user_id %>">Confirm password
+                <input id="confirm-password-<%= row.user_id %>" name="password_confirm" type="password" autocomplete="new-password" required>
+              </label>
+              <button class="btn" type="submit">Set Password</button>
+            </form>
+            <p class="hint"><a href="/users/<%= row.user_id %>">Edit account</a></p>
+          </td>
         </tr>
       <% }) %>
     </tbody>

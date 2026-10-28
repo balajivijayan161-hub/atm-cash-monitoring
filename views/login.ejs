@@ -21,6 +21,8 @@
     </div>
     <% if (reason === 'expired') { %>
       <p class="banner bad" role="status">Your session expired. Sign in again.</p>
+    <% } else if (reason === 'ready') { %>
+      <p class="banner ok" role="status">Password saved. Sign in with the username superadmin.</p>
     <% } %>
     <% if (error) { %>
       <p class="banner bad" role="alert" id="login-error"><%= error %></p>
