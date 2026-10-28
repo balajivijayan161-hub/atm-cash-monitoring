@@ -1,10 +1,14 @@
 # ATM Cash Replenishment & Downtime Monitoring
 
+**Live demo:** [atm-cash-monitoring.onrender.com](https://atm-cash-monitoring.onrender.com)
+
+The free server may take about a minute to wake up on the first visit.
+
 Operations ledger for a cash-management vendor that services 450 ATMs. It forecasts weekday cash need, plans replenishment runs onto vans and custodians, records cassette loads, reconciles counted cash, and tracks downtime and fault tickets.
 
 The deployment runs on sample data for demonstration. Every page except sign-in and the health check requires a signed-in user.
 
-## Local run
+## Run locally
 
 Requirements: Node.js 18 or newer, and PostgreSQL 14 or newer.
 
