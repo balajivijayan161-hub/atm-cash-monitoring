@@ -1,6 +1,8 @@
 const { pool, applySchema } = require('./db');
 const { seedIfEmpty } = require('../db/seed');
 const { createApp } = require('./app');
+const { startInboundPoller, stopInboundPoller } = require('./services/inboundPoller');
+const { stopSimulator } = require('./services/simulator');
 
 async function boot() {
   const client = await pool.connect();
@@ -27,7 +29,10 @@ async function main() {
   const server = app.listen(port, '0.0.0.0', () => {
     console.log(`ATM cash operations listening on ${port}`);
   });
+  startInboundPoller();
   const shutdown = () => {
+    stopInboundPoller();
+    stopSimulator();
     server.close(() => {
       pool.end().catch(() => {});
     });

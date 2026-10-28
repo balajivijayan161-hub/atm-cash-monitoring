@@ -38,7 +38,7 @@ function parseCsv(entries, today) {
   const index = Object.fromEntries(header.map((name, i) => [name, i]));
   return entries.slice(1).map((entry) => {
     const cells = splitCsv(entry.raw);
-    return buildRow({
+    const row = buildRow({
       lineNo: entry.lineNo,
       raw: entry.raw,
       atmCode: cells[index.atm_code] || '',
@@ -48,7 +48,61 @@ function parseCsv(entries, today) {
       dateStyle: 'iso',
       today,
     });
+    if (Object.prototype.hasOwnProperty.call(index, 'cash_level')) {
+      const cash = parseCashLevel(cells[index.cash_level] || '');
+      if (cash.error) addProblem(row, cash.error);
+      else row.cashLevel = cash.value;
+    }
+    if (Object.prototype.hasOwnProperty.call(index, 'fault_code')) {
+      const fault = parseFaultCode(cells[index.fault_code] || '');
+      if (fault.error) addProblem(row, fault.error);
+      else row.faultCode = fault.value;
+    }
+    if (Object.prototype.hasOwnProperty.call(index, 'online')) {
+      const online = parseOnline(cells[index.online] || '');
+      if (online.error) addProblem(row, online.error);
+      else row.online = online.value;
+    }
+    if (row.faultCode === 'offline' && row.online == null) row.online = false;
+    return row;
   });
+}
+
+function addProblem(row, message) {
+  row.error = row.error ? `${row.error} ${message}` : message;
+}
+
+const FAULT_CODES = new Set([
+  'cash_out',
+  'hardware',
+  'communication',
+  'cassette_error',
+  'power',
+  'vandalism',
+  'offline',
+]);
+
+function parseCashLevel(value) {
+  const text = String(value || '').trim();
+  if (!text) return { value: null };
+  if (/^-/.test(text)) return { error: 'Cash level cannot be negative.' };
+  if (!/^\d+(\.\d{1,2})?$/.test(text)) return { error: 'Cash level must be a number with up to 2 decimal places.' };
+  return { value: Number(text) };
+}
+
+function parseFaultCode(value) {
+  const text = String(value || '').trim().toLowerCase();
+  if (!text) return { value: null };
+  if (!FAULT_CODES.has(text)) return { error: `Unknown fault code ${text}.` };
+  return { value: text };
+}
+
+function parseOnline(value) {
+  const text = String(value || '').trim().toLowerCase();
+  if (!text) return { value: null };
+  if (['1', 'true', 'yes', 'y', 'online', 'up'].includes(text)) return { value: true };
+  if (['0', 'false', 'no', 'n', 'offline', 'down'].includes(text)) return { value: false };
+  return { error: 'Online flag must be yes or no.' };
 }
 
 function parseFixed(entry, today) {
@@ -209,6 +263,7 @@ function formatFixedLine({ atmCode, txnDate, amount, txnCount }) {
 
 module.exports = {
   FIXED_LENGTH,
+  FAULT_CODES,
   parseSwitchFile,
   formatFixedLine,
 };

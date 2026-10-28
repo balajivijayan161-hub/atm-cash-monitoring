@@ -63,7 +63,7 @@ function errorDocument(err) {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Ledger error</title>
   <link rel="stylesheet" href="/css/app.css"></head><body>
   <main class="content"><h1>The ledger could not complete that request.</h1>
-  <p>Refresh the page. If you just started the app, the database may still be loading sample data.</p>
+  <p>Refresh the page. If you just started the app, the database may still be loading.</p>
   ${detail}</main></body></html>`;
 }
 

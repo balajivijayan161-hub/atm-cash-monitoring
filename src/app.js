@@ -75,6 +75,8 @@ function createApp() {
   app.use(require('./routes/tickets'));
   app.use(require('./routes/reports'));
   app.use(require('./routes/switch'));
+  app.use(require('./routes/imports'));
+  app.use(require('./routes/simulator'));
   app.use(require('./routes/operations'));
 
   app.use((req, res) => {

@@ -32,6 +32,7 @@
         <a class="<%= navClass('/runs') %>" href="/runs"<% if (navClass('/runs')) { %> aria-current="page"<% } %>>Replenishment</a>
         <a class="<%= navClass('/reconciliations') %>" href="/reconciliations"<% if (navClass('/reconciliations')) { %> aria-current="page"<% } %>>Reconciliation</a>
         <a class="<%= navClass('/switch') %>" href="/switch"<% if (navClass('/switch')) { %> aria-current="page"<% } %>>Switch file</a>
+        <a class="<%= navClass('/imports') %>" href="/imports"<% if (navClass('/imports')) { %> aria-current="page"<% } %>>Imports</a>
       </nav>
       <p class="nav-label">Reports</p>
       <nav class="nav" aria-label="Reports">
@@ -43,7 +44,6 @@
       </nav>
     </aside>
     <div class="content">
-      <p class="demo-banner">Demo data — synthetic cash operations for a 450-ATM fleet. No live accounts or customer information.</p>
       <% if (notice) { %><p class="banner ok" role="status"><%= notice %></p><% } %>
       <% if (warning) { %><p class="banner bad" role="alert"><%= warning %></p><% } %>
       <%- pageBody %>

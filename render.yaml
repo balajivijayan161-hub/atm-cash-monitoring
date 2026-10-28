@@ -24,3 +24,13 @@ services:
         fromDatabase:
           name: atm-cash-db
           property: connectionString
+      - key: SWITCH_POLL_MS
+        value: "300000"
+      - key: CASH_ALERT_PCT
+        value: "20"
+      - key: OFFLINE_MINUTES
+        value: "2"
+      - key: SIMULATOR_TICK_MS
+        value: "4000"
+      - key: SIMULATOR_MAX_MS
+        value: "900000"

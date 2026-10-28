@@ -3,5 +3,11 @@ node_modules/
 *.log
 ej_logs/
 ej_archive/
+data/inbound/*
+data/processed/*
+data/rejected/*
+!data/inbound/.gitkeep
+!data/processed/.gitkeep
+!data/rejected/.gitkeep
 .DS_Store
 npm-debug.log*

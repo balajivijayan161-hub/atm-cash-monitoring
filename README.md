@@ -2,7 +2,7 @@
 
 Operations ledger for a cash-management vendor that services 450 ATMs. It forecasts weekday cash need, plans replenishment runs onto vans and custodians, records cassette loads, reconciles counted cash, and tracks downtime and fault tickets.
 
-The figures are **demo data**. There is no authentication and no live customer information. A banner on every page says so.
+The deployment runs on sample data for demonstration. There is no authentication.
 
 ## Local run
 
@@ -78,7 +78,7 @@ Session time zone is `Asia/Kolkata`. Amounts are Indian rupees. Denominations ar
 
 | Route | What it is |
 | --- | --- |
-| `/` | Uptime dashboard: fleet uptime, charts by location, day, and weekday |
+| `/` | Uptime dashboard: fleet uptime, cash alerts, charts, and the live-feed control |
 | `/health` | JSON health check |
 | `/atms`, `/atms/:id` | ATM list and detail, including a 7-day forecast |
 | `/forecast` | Pick an ATM and a date; shows `forecast_cash` and the four source days |
@@ -90,6 +90,7 @@ Session time zone is `Asia/Kolkata`. Amounts are Indian rupees. Denominations ar
 | `/reports/withdrawal-matrix` | Withdrawals by ATM and weekday |
 | `/reports/downtime-by-location` | Downtime grouped by location |
 | `/switch`, `/switch/:id` | Switch-file upload, staging result, and error rows |
+| `/imports`, `/imports/:id` | Every ingested batch and its per-row rejection reasons |
 | `/operations/ej-archive` | What `scripts/archive_ej_logs.sh` does, and the script itself |
 
 ## Tables
@@ -110,7 +111,10 @@ Session time zone is `Asia/Kolkata`. Amounts are Indian rupees. Denominations ar
 | `downtime_log` | Outage windows. An open window has no end time |
 | `replenishment_plan_log` | Each call of the planning procedure |
 | `switch_import_batches`, `switch_import_rows` | Staging area for the inbound switch file |
-| `app_meta` | Records that the sample fleet has been loaded |
+| `inbound_files` | SHA-256 of each scheduled file so the same file is not loaded twice |
+| `replenishment_requests` | Open cash alerts raised when a loaded level is under the threshold |
+| `atm_link_status` | When the feed last saw an ATM go offline |
+| `app_meta` | Records that the seeded fleet has been loaded |
 
 ## How the highlights map to code
 
@@ -153,6 +157,10 @@ Fixed width, 42 characters, no header:
 | 37–42 | Transaction count, zero padded |
 
 Valid rows are inserted into `switch_import_rows` as `staged`, copied into `daily_withdrawals`, then marked `loaded`. Invalid rows stay `error`. By default an ATM/date that already has a total is rejected. Tick **replace** to overwrite it.
+
+Optional CSV columns, after the four required ones: `cash_level`, `fault_code`, `online`. A cash level replaces `current_cash`. A level below `CASH_ALERT_PCT` (default 20) of capacity opens one replenishment alert for that ATM. A fault code opens one open ticket per ATM and code. `online=no` starts downtime after `OFFLINE_MINUTES` (default 2) and a later `online=yes` closes it.
+
+The web process polls `data/inbound/` every `SWITCH_POLL_MS` milliseconds (default 300000). A file is loaded once, keyed by SHA-256. Accepted files move to `data/processed/`; files with nothing loaded move to `data/rejected/`. Set `SWITCH_POLL_MS=0` to turn the poller off. Render’s free disk is ephemeral, so those folders do not survive a restart; use the dashboard live feed there. The feed stays off until someone starts it, and it stops after `SIMULATOR_MAX_MS` (default 15 minutes).
 
 ## EJ archive script
 

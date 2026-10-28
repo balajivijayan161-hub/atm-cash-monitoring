@@ -1,0 +1,28 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Switch ledger</p>
+    <h1>Import history</h1>
+    <p class="lede">Every batch from a scheduled file, a manual upload, or the live feed. Times are India Standard Time.</p>
+  </div>
+</header>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Batch</th><th>Source</th><th>File</th><th>Received (IST)</th><th class="num">Accepted</th><th class="num">Rejected</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <% if (!rows.length) { %><tr><td colspan="7" class="empty">No switch batches yet.</td></tr><% } %>
+      <% rows.forEach((row) => { %>
+        <tr>
+          <td><a href="/imports/<%= row.batch_id %>"><%= row.batch_id %></a></td>
+          <td><%= label(row.source || 'manual') %></td>
+          <td><%= row.filename %></td>
+          <td><%= prettyDateTime(row.uploaded_at) %></td>
+          <td class="num"><%= row.loaded_count %></td>
+          <td class="num"><%= row.error_count %></td>
+          <td><span class="pill <%= String(row.status).replace(/_/g, '-') %>"><%= label(row.status) %></span></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>

@@ -1,6 +1,17 @@
+const crypto = require('crypto');
 const { parseSwitchFile } = require('../lib/switchFile');
+const { applyIngestionRules } = require('./ingestionRules');
 
-async function importSwitchContent(client, { filename, content, replaceExisting }) {
+const SOURCES = new Set(['manual', 'schedule', 'simulator']);
+
+async function importSwitchContent(client, {
+  filename,
+  content,
+  replaceExisting,
+  source = 'manual',
+  contentSha256 = null,
+  rules,
+} = {}) {
   const todayRes = await client.query('SELECT CURRENT_DATE::text AS today');
   const today = todayRes.rows[0].today;
   const parsed = parseSwitchFile(content, { today });
@@ -13,15 +24,25 @@ async function importSwitchContent(client, { filename, content, replaceExisting 
   const codeMap = new Map();
   if (codes.length) {
     const found = await client.query(
-      'SELECT atm_id, atm_code FROM atms WHERE atm_code = ANY($1::text[])',
+      'SELECT atm_id, atm_code, capacity_amount FROM atms WHERE atm_code = ANY($1::text[])',
       [codes]
     );
-    for (const row of found.rows) codeMap.set(row.atm_code, row.atm_id);
+    for (const row of found.rows) {
+      codeMap.set(row.atm_code, { atmId: row.atm_id, capacity: Number(row.capacity_amount) });
+    }
   }
 
   for (const row of parsed.rows) {
-    if (!row.error && row.atmCode && !codeMap.has(row.atmCode)) {
+    if (row.error || !row.atmCode) continue;
+    const atm = codeMap.get(row.atmCode);
+    if (!atm) {
       row.error = `Unknown ATM code ${row.atmCode}.`;
+      continue;
+    }
+    row.atmId = atm.atmId;
+    row.capacity = atm.capacity;
+    if (row.cashLevel != null && row.cashLevel > atm.capacity) {
+      row.error = 'Cash level exceeds ATM capacity.';
     }
   }
 
@@ -34,7 +55,7 @@ async function importSwitchContent(client, { filename, content, replaceExisting 
        WHERE (w.atm_id, w.withdrawal_date) IN (
          SELECT * FROM UNNEST($1::int[], $2::date[])
        )`,
-      [ready.map((row) => codeMap.get(row.atmCode)), ready.map((row) => row.txnDate)]
+      [ready.map((row) => row.atmId), ready.map((row) => row.txnDate)]
     );
     const taken = new Set(existing.rows.map((row) => `${row.atm_code}|${row.withdrawal_date}`));
     for (const row of ready) {
@@ -44,12 +65,14 @@ async function importSwitchContent(client, { filename, content, replaceExisting 
     }
   }
 
+  const batchSource = SOURCES.has(source) ? source : 'manual';
+  const hash = contentSha256 || crypto.createHash('sha256').update(String(content)).digest('hex');
   const batch = await client.query(
     `INSERT INTO switch_import_batches
-       (filename, file_format, row_count, loaded_count, error_count, replace_existing, status)
-     VALUES ($1, $2, $3, 0, 0, $4, 'rejected')
+       (filename, file_format, row_count, loaded_count, error_count, replace_existing, status, source, content_sha256)
+     VALUES ($1, $2, $3, 0, 0, $4, 'rejected', $5, $6)
      RETURNING batch_id`,
-    [safeName(filename), parsed.format, parsed.rows.length, Boolean(replaceExisting)]
+    [safeName(filename), parsed.format, parsed.rows.length, Boolean(replaceExisting), batchSource, hash]
   );
   const batchId = batch.rows[0].batch_id;
 
@@ -137,7 +160,21 @@ async function importSwitchContent(client, { filename, content, replaceExisting 
     [batchId, rowCount, loaded, errors, status]
   );
 
-  return { ok: true, batchId, loaded, errors, rowCount, status, format: parsed.format };
+  const loadedLines = new Set(
+    (await client.query(
+      `SELECT line_no FROM switch_import_rows WHERE batch_id = $1 AND status = 'loaded'`,
+      [batchId]
+    )).rows.map((row) => row.line_no)
+  );
+  if (rules !== false) {
+    await applyIngestionRules(client, parsed.rows.map((row) => ({
+      ...row,
+      loaded: loadedLines.has(row.lineNo),
+      batchId,
+    })), rules || {});
+  }
+
+  return { ok: true, batchId, loaded, errors, rowCount, status, format: parsed.format, source: batchSource, hash };
 }
 
 function safeName(filename) {
@@ -145,4 +182,4 @@ function safeName(filename) {
   return base || 'switch-file.csv';
 }
 
-module.exports = { importSwitchContent };
+module.exports = { importSwitchContent, SOURCES };

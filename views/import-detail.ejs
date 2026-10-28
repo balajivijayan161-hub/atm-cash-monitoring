@@ -1,0 +1,28 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow"><%= label(batch.source || 'manual') %> · <%= batch.file_format %></p>
+    <h1><%= batch.filename %></h1>
+    <p class="lede">Received <%= prettyDateTime(batch.uploaded_at) %> IST. <%= batch.loaded_count %> accepted, <%= batch.error_count %> rejected, <%= batch.row_count %> rows in the file.</p>
+  </div>
+  <a class="btn" href="/imports">All imports</a>
+</header>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Line</th><th>ATM</th><th>Date</th><th class="num">Amount</th><th class="num">Count</th><th>Status</th><th>Rejection reason</th></tr>
+    </thead>
+    <tbody>
+      <% rows.forEach((row) => { %>
+        <tr class="<%= row.status === 'error' ? 'row-error' : '' %>">
+          <td><%= row.line_no %></td>
+          <td><%= row.atm_code || '—' %></td>
+          <td><%= row.txn_date ? prettyDate(row.txn_date) : '—' %></td>
+          <td class="num"><%= row.amount == null ? '—' : inr(row.amount) %></td>
+          <td class="num"><%= row.txn_count == null ? '—' : row.txn_count %></td>
+          <td><span class="pill <%= row.status %>"><%= row.status %></span></td>
+          <td><%= row.error_message || '—' %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>

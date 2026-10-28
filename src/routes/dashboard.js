@@ -2,11 +2,12 @@ const express = require('express');
 const { query } = require('../db');
 const { asyncRoute, renderPage } = require('../http');
 const { lastEightWeeks } = require('../lib/windows');
+const { getSimulatorStatus } = require('../services/simulator');
 
 const router = express.Router();
 
 router.get('/', asyncRoute(async (req, res) => {
-  const [fleet, tickets, runs, dispensed, byLocation, byDay, byWeekday, worst, recentTickets] = await Promise.all([
+  const [fleet, tickets, runs, dispensed, byLocation, byDay, byWeekday, worst, recentTickets, alerts, downtimeOpen] = await Promise.all([
     query(`SELECT
              COUNT(*)::int AS atms,
              ROUND(AVG(downtime_pct)::numeric, 2) AS avg_downtime_pct,
@@ -60,6 +61,19 @@ router.get('/', asyncRoute(async (req, res) => {
            JOIN atms a ON a.atm_id = ft.atm_id
            ORDER BY ft.opened_at DESC
            LIMIT 6`),
+    query(`SELECT r.request_id, r.current_cash, r.capacity_amount, r.threshold_pct, r.created_at,
+                  a.atm_id, a.atm_code, a.site_name
+           FROM replenishment_requests r
+           JOIN atms a ON a.atm_id = r.atm_id
+           WHERE r.status = 'open'
+           ORDER BY r.created_at DESC
+           LIMIT 8`),
+    query(`SELECT d.downtime_id, d.started_at, d.reason, a.atm_id, a.atm_code
+           FROM downtime_log d
+           JOIN atms a ON a.atm_id = d.atm_id
+           WHERE d.ended_at IS NULL
+           ORDER BY d.started_at DESC
+           LIMIT 6`),
   ]);
 
   const fleetRow = fleet.rows[0] || {};
@@ -77,6 +91,9 @@ router.get('/', asyncRoute(async (req, res) => {
     dispensed: dispensed.rows[0],
     worst: worst.rows,
     recentTickets: recentTickets.rows,
+    alerts: alerts.rows,
+    downtimeOpen: downtimeOpen.rows,
+    simulator: getSimulatorStatus(),
     charts: {
       locations: byLocation.rows.map((row) => row.location_name),
       uptime: byLocation.rows.map((row) => Number(row.uptime_pct)),
