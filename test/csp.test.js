@@ -32,6 +32,9 @@ test('CSP_MODE enforce, report-only, and off keep frame protection', async () =>
   assert.ok(enforce.get('content-security-policy'));
   assert.equal(enforce.get('content-security-policy-report-only'), null);
   assert.equal(enforce.get('x-frame-options'), 'DENY');
+  const scriptSrc = enforce.get('content-security-policy').split(';').map((part) => part.trim()).find((part) => part.startsWith('script-src '));
+  assert.ok(scriptSrc);
+  assert.doesNotMatch(scriptSrc, /unsafe-inline/);
 
   const report = await headersFor('report-only');
   assert.equal(report.get('content-security-policy'), null);

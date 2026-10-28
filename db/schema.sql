@@ -245,11 +245,15 @@ AS $fn$
   ORDER BY w.withdrawal_date;
 $fn$;
 
+DROP PROCEDURE IF EXISTS plan_replenishment_routes(DATE, INTEGER, INTEGER, INTEGER);
+
 CREATE OR REPLACE PROCEDURE plan_replenishment_routes(
   p_target_date DATE,
   p_location_id INTEGER,
   INOUT p_runs_created INTEGER,
-  INOUT p_atms_assigned INTEGER
+  INOUT p_atms_assigned INTEGER,
+  p_branch_id INTEGER DEFAULT NULL,
+  p_region TEXT DEFAULT NULL
 )
 LANGUAGE plpgsql
 AS $proc$
@@ -280,6 +284,11 @@ BEGIN
     JOIN branches b ON b.branch_id = a.branch_id
     WHERE a.status IN ('active', 'cash_out')
       AND (p_location_id IS NULL OR b.location_id = p_location_id)
+      AND (p_branch_id IS NULL OR a.branch_id = p_branch_id)
+      AND (p_region IS NULL OR EXISTS (
+        SELECT 1 FROM locations plan_loc
+        WHERE plan_loc.location_id = b.location_id AND plan_loc.region = p_region
+      ))
     ORDER BY b.location_id, a.atm_id
   LOOP
     IF EXISTS (
@@ -409,8 +418,8 @@ BEGIN
 END;
 $proc$;
 
-COMMENT ON PROCEDURE plan_replenishment_routes(DATE, INTEGER, INTEGER, INTEGER) IS
-  'Plans replenishment runs for ATMs whose forecast exceeds remaining cash, grouped by location onto vans and custodians.';
+COMMENT ON PROCEDURE plan_replenishment_routes(DATE, INTEGER, INTEGER, INTEGER, INTEGER, TEXT) IS
+  'Plans replenishment runs for ATMs whose forecast exceeds remaining cash, grouped by location onto vans and custodians. Optional branch and region keep the plan inside the caller''s area.';
 
 CREATE OR REPLACE FUNCTION fault_tickets_before_insert()
 RETURNS TRIGGER

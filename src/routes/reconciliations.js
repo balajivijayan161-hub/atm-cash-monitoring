@@ -2,11 +2,41 @@ const express = require('express');
 const { query, withTransaction } = require('../db');
 const { asyncRoute, renderPage, intOrNull, isIsoDate, inr, parseLedgerAmount, ledgerAmountError } = require('../http');
 const { requireCan, deny, guard } = require('../auth/gate');
-const { can, scopeBinds, atmScopeSql } = require('../auth/permissions');
+const { can, scopeBinds, atmScopeSql, runScopeSql } = require('../auth/permissions');
 const { recordChange } = require('../auth/activity');
 const { REASONS, caseChangeError } = require('../services/reconCase');
 
 const router = express.Router();
+
+function formLists(user) {
+  const scope = scopeBinds(user);
+  return Promise.all([
+    query(`SELECT a.atm_id, a.atm_code, a.site_name, l.location_name
+           FROM atms a
+           JOIN branches b ON b.branch_id = a.branch_id
+           JOIN locations l ON l.location_id = b.location_id
+           WHERE a.atm_id IN (${atmScopeSql(1)})
+           ORDER BY l.location_name, a.atm_code`, scope),
+    query(`SELECT rr.run_id, rr.planned_date::text AS planned_date, cv.van_code, l.location_name
+           FROM replenishment_runs rr
+           JOIN cash_vans cv ON cv.van_id = rr.van_id
+           JOIN locations l ON l.location_id = rr.location_id
+           WHERE ${runScopeSql('rr', 1)}
+           ORDER BY rr.planned_date DESC, rr.run_id DESC
+           LIMIT 40`, scope),
+  ]);
+}
+
+async function reconInScope(id, user) {
+  return query(
+    `SELECT r.case_status, r.reason_code
+     FROM reconciliations r
+     JOIN atms a ON a.atm_id = r.atm_id
+     WHERE r.reconciliation_id = $1
+       AND a.atm_id IN (${atmScopeSql(2)})`,
+    [id, ...scopeBinds(user)]
+  );
+}
 
 router.get('/reconciliations', asyncRoute(async (req, res) => {
   const rows = await query(
@@ -25,18 +55,19 @@ router.get('/reconciliations', asyncRoute(async (req, res) => {
 }));
 
 router.get('/reconciliations/new', asyncRoute(async (req, res) => {
-  const [atms, runs, dates] = await Promise.all([
-    query(`SELECT a.atm_id, a.atm_code, a.site_name, l.location_name
-           FROM atms a
-           JOIN branches b ON b.branch_id = a.branch_id
-           JOIN locations l ON l.location_id = b.location_id
-           ORDER BY l.location_name, a.atm_code`),
-    query(`SELECT rr.run_id, rr.planned_date::text AS planned_date, cv.van_code, l.location_name
-           FROM replenishment_runs rr
-           JOIN cash_vans cv ON cv.van_id = rr.van_id
-           JOIN locations l ON l.location_id = rr.location_id
-           ORDER BY rr.planned_date DESC, rr.run_id DESC
-           LIMIT 40`),
+  const preset = intOrNull(req.query.atm_id);
+  if (preset) {
+    const exists = await query('SELECT 1 FROM atms WHERE atm_id = $1', [preset]);
+    if (exists.rowCount) {
+      const allowed = await query(
+        `SELECT 1 FROM atms a WHERE a.atm_id = $1 AND a.atm_id IN (${atmScopeSql(2)})`,
+        [preset, ...scopeBinds(req.user)]
+      );
+      if (!allowed.rowCount) return deny(req, res);
+    }
+  }
+  const [[atms, runs], dates] = await Promise.all([
+    formLists(req.user),
     query('SELECT CURRENT_DATE::text AS today'),
   ]);
   renderPage(req, res, 'recon-form', {
@@ -59,6 +90,27 @@ router.post('/reconciliations', requireCan('createRecon'), asyncRoute(async (req
   const atmId = intOrNull(req.body.atm_id);
   const runText = req.body.run_id == null ? '' : String(req.body.run_id).trim();
   const runId = intOrNull(req.body.run_id);
+  const scope = scopeBinds(req.user);
+  if (atmId) {
+    const atm = await query('SELECT 1 FROM atms WHERE atm_id = $1', [atmId]);
+    if (atm.rowCount) {
+      const allowed = await query(
+        `SELECT 1 FROM atms a WHERE a.atm_id = $1 AND a.atm_id IN (${atmScopeSql(2)})`,
+        [atmId, ...scope]
+      );
+      if (!allowed.rowCount) return deny(req, res);
+    }
+  }
+  if (runId) {
+    const run = await query('SELECT 1 FROM replenishment_runs WHERE run_id = $1', [runId]);
+    if (run.rowCount) {
+      const allowed = await query(
+        `SELECT 1 FROM replenishment_runs rr WHERE rr.run_id = $1 AND ${runScopeSql('rr', 2)}`,
+        [runId, ...scope]
+      );
+      if (!allowed.rowCount) return deny(req, res);
+    }
+  }
   const reconDate = typeof req.body.recon_date === 'string' ? req.body.recon_date : '';
   const expected = parseLedgerAmount(req.body.expected_amount || '');
   const counted = parseLedgerAmount(req.body.counted_amount || '');
@@ -92,19 +144,7 @@ router.post('/reconciliations', requireCan('createRecon'), asyncRoute(async (req
     notes,
   };
   if (errors.length) {
-    const [atms, runs] = await Promise.all([
-      query(`SELECT a.atm_id, a.atm_code, a.site_name, l.location_name
-             FROM atms a
-             JOIN branches b ON b.branch_id = a.branch_id
-             JOIN locations l ON l.location_id = b.location_id
-             ORDER BY l.location_name, a.atm_code`),
-      query(`SELECT rr.run_id, rr.planned_date::text AS planned_date, cv.van_code, l.location_name
-             FROM replenishment_runs rr
-             JOIN cash_vans cv ON cv.van_id = rr.van_id
-             JOIN locations l ON l.location_id = rr.location_id
-             ORDER BY rr.planned_date DESC
-             LIMIT 40`),
-    ]);
+    const [atms, runs] = await formLists(req.user);
     return renderPage(req, res, 'recon-form', {
       title: 'New Reconciliation',
       atms: atms.rows,
@@ -161,6 +201,8 @@ router.get('/reconciliations/:id', asyncRoute(async (req, res) => {
   if (!row.rowCount || !row.rows[0].case_status) {
     return renderPage(req, res, 'not-found', { title: 'Case Not Found', statusCode: 404 });
   }
+  const allowed = await reconInScope(id, req.user);
+  if (!allowed.rowCount) return deny(req, res);
   const comments = await query(
     `SELECT c.body, c.created_at, u.full_name
      FROM recon_comments c
@@ -186,6 +228,8 @@ router.post('/reconciliations/:id/comment', asyncRoute(async (req, res) => {
   if (!id || !body) return res.redirect(`/reconciliations/${id || ''}?warning=Enter a note.`);
   const found = await query(`SELECT case_status FROM reconciliations WHERE reconciliation_id = $1`, [id]);
   if (!found.rowCount) return renderPage(req, res, 'not-found', { title: 'Case Not Found', statusCode: 404 });
+  const allowed = await reconInScope(id, req.user);
+  if (!allowed.rowCount) return deny(req, res);
   await query(
     `INSERT INTO recon_comments (reconciliation_id, user_id, body) VALUES ($1, $2, $3)`,
     [id, req.user.user_id, body]
@@ -207,6 +251,8 @@ router.post('/reconciliations/:id/status', asyncRoute(async (req, res) => {
   if (!found.rowCount || !found.rows[0].case_status) {
     return renderPage(req, res, 'not-found', { title: 'Case Not Found', statusCode: 404 });
   }
+  const allowedCase = await reconInScope(id, req.user);
+  if (!allowedCase.rowCount) return deny(req, res);
   const to = String(req.body.case_status || '');
   const reason = String(req.body.reason_code || found.rows[0].reason_code || '');
   const assignee = intOrNull(req.body.assignee_id);
@@ -218,13 +264,6 @@ router.post('/reconciliations/:id/status', asyncRoute(async (req, res) => {
   });
   if (error) return res.redirect(`/reconciliations/${id}?warning=${encodeURIComponent(error)}`);
   const closing = to === 'resolved' || to === 'written_off';
-  const allowed = await query(
-    `SELECT 1 FROM reconciliations r
-     JOIN atms a ON a.atm_id = r.atm_id
-     WHERE r.reconciliation_id = $1 AND a.atm_id IN (${atmScopeSql(2)})`,
-    [id, ...scopeBinds(req.user)]
-  );
-  if (!allowed.rowCount) return deny(req, res);
   await query(
     `UPDATE reconciliations
      SET case_status = $2::varchar,

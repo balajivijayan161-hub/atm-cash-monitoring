@@ -4,6 +4,7 @@ const { query, withTransaction } = require('../db');
 const { asyncRoute, renderPage, intOrNull, batchName } = require('../http');
 const { importSwitchContent } = require('../services/switchImport');
 const { csrfOk, guard } = require('../auth/gate');
+const { scopeBinds } = require('../auth/permissions');
 const { recordChange } = require('../auth/activity');
 
 const router = express.Router();
@@ -70,6 +71,7 @@ router.post('/switch', (req, res, next) => {
       filename,
       content,
       replaceExisting: req.body.replace === 'on',
+      scope: scopeBinds(req.user),
     }));
     if (!result.ok) {
       return renderPage(req, res, 'switch', {

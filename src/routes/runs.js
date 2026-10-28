@@ -2,11 +2,11 @@ const express = require('express');
 const { query, withTransaction } = require('../db');
 const { asyncRoute, renderPage, intOrNull, isIsoDate, pageWindow } = require('../http');
 const { requireCan, requireAny, deny, guard } = require('../auth/gate');
-const { can, scopeBinds, runScopeSql } = require('../auth/permissions');
+const { can, scopeBinds, atmScopeSql, locationScopeSql, runScopeSql } = require('../auth/permissions');
 const { recordChange } = require('../auth/activity');
 const { loadReference } = require('../services/reference');
 const { loadSuggestion } = require('../services/denom');
-const { saveRun } = require('../services/runs');
+const { saveRun, runTargetsOutOfScope } = require('../services/runs');
 const { totalLoaded } = require('../../public/js/money');
 
 const router = express.Router();
@@ -29,7 +29,13 @@ router.get('/runs', asyncRoute(async (req, res) => {
       AND ${runScopeSql('rr', 4)}`;
   const [count, locations, dates, plans] = await Promise.all([
     query(`SELECT COUNT(*)::int AS total FROM replenishment_runs rr ${where}`, filters),
-    query('SELECT location_id, location_name FROM locations ORDER BY location_name'),
+    query(
+      `SELECT l.location_id, l.location_name
+       FROM locations l
+       WHERE ${locationScopeSql('l', 1)}
+       ORDER BY l.location_name`,
+      scopeBinds(req.user)
+    ),
     query(`SELECT CURRENT_DATE::text AS today, (CURRENT_DATE + 1)::text AS tomorrow`),
     query(`SELECT plan_id, target_date::text AS target_date, runs_created, atms_assigned, planned_at,
                   location_id
@@ -79,12 +85,21 @@ router.post('/runs/plan', requireCan('planRuns'), asyncRoute(async (req, res) =>
   if (locationText && !locationId) {
     return res.redirect('/runs?warning=Choose a valid location.');
   }
+  const scope = scopeBinds(req.user);
   if (locationId) {
     const location = await query('SELECT 1 FROM locations WHERE location_id = $1', [locationId]);
     if (!location.rowCount) return res.redirect('/runs?warning=Choose a valid location.');
+    const allowed = await query(
+      `SELECT 1 FROM locations l WHERE l.location_id = $1 AND ${locationScopeSql('l', 2)}`,
+      [locationId, ...scope]
+    );
+    if (!allowed.rowCount) return deny(req, res);
   }
   try {
-    await query('CALL plan_replenishment_routes($1::date, $2::int, 0, 0)', [plannedDate, locationId]);
+    await query(
+      'CALL plan_replenishment_routes($1::date, $2::int, 0, 0, $3::int, $4::text)',
+      [plannedDate, locationId, scope[1], scope[0]]
+    );
   } catch (err) {
     console.error(err);
     return res.redirect('/runs?warning=The planner could not finish.');
@@ -114,10 +129,20 @@ router.post('/runs/plan', requireCan('planRuns'), asyncRoute(async (req, res) =>
 
 router.get('/runs/new', requireCan('createRun'), asyncRoute(async (req, res) => {
   const [ref, dates] = await Promise.all([
-    loadReference(),
+    loadReference(req.user),
     query(`SELECT (CURRENT_DATE + 1)::text AS tomorrow`),
   ]);
   const atmId = intOrNull(req.query.atm_id);
+  if (atmId) {
+    const allowed = await query(
+      `SELECT 1 FROM atms a WHERE a.atm_id = $1 AND a.atm_id IN (${atmScopeSql(2)})`,
+      [atmId, ...scopeBinds(req.user)]
+    );
+    if (!allowed.rowCount) {
+      const exists = await query('SELECT 1 FROM atms WHERE atm_id = $1', [atmId]);
+      if (exists.rowCount) return deny(req, res);
+    }
+  }
   const suggestion = atmId ? await loadSuggestion({ query }, atmId) : null;
   const lines = suggestion && suggestion.notes.some((row) => row.notes > 0)
     ? suggestion.notes.filter((row) => row.notes > 0).map((row, index) => ({
@@ -155,12 +180,15 @@ function needsApproval(user, status, approvalStatus) {
 }
 
 router.post('/runs', requireCan('createRun'), asyncRoute(async (req, res) => {
+  const scope = scopeBinds(req.user);
+  if (await runTargetsOutOfScope({ query }, req.body, scope)) return deny(req, res);
   if (needsApproval(req.user, req.body.status, null)) {
     return res.redirect('/runs/new?warning=This run has to be approved before it can be dispatched or completed.');
   }
-  const saved = await withTransaction((client) => saveRun(client, req.body, null));
+  const saved = await withTransaction((client) => saveRun(client, req.body, null, scope));
+  if (saved.denied) return deny(req, res);
   if (saved.errors) {
-    const ref = await loadReference();
+    const ref = await loadReference(req.user);
     return renderPage(req, res, 'run-form', {
       title: 'New Replenishment Run',
       action: '/runs',
@@ -209,7 +237,7 @@ router.get('/runs/:id', asyncRoute(async (req, res, next) => {
        ORDER BY a.atm_code, cl.cassette_number`,
       [id]
     ),
-    loadReference(),
+    loadReference(req.user),
   ]);
   if (!run.rowCount) return renderPage(req, res, 'not-found', { title: 'Run Not Found', statusCode: 404 });
   if (!visible.rowCount) return deny(req, res);
@@ -251,12 +279,15 @@ router.post('/runs/:id', requireAny('editRun', 'editOwnRun'), asyncRoute(async (
     [id, ...scopeBinds(req.user)]
   );
   if (!existing.rowCount) return deny(req, res);
+  const scope = scopeBinds(req.user);
+  if (await runTargetsOutOfScope({ query }, req.body, scope, id)) return deny(req, res);
   if (needsApproval(req.user, req.body.status, existing.rows[0].approval_status)) {
     return res.redirect(`/runs/${id}?warning=This run has to be approved before it can be dispatched or completed.`);
   }
-  const saved = await withTransaction((client) => saveRun(client, req.body, id));
+  const saved = await withTransaction((client) => saveRun(client, req.body, id, scope));
+  if (saved.denied) return deny(req, res);
   if (saved.errors) {
-    const ref = await loadReference();
+    const ref = await loadReference(req.user);
     return renderPage(req, res, 'run-form', {
       title: `Replenishment Run ${id}`,
       action: `/runs/${id}`,
@@ -311,8 +342,18 @@ router.post('/runs/:id/approve', requireCan('approveRuns'), asyncRoute(async (re
 router.post('/runs/:id/delete', requireCan('deleteRun'), asyncRoute(async (req, res) => {
   const id = intOrNull(req.params.id);
   if (!id) return res.redirect('/runs?warning=That run was not found.');
-  const deleted = await query('DELETE FROM replenishment_runs WHERE run_id = $1', [id]);
-  if (!deleted.rowCount) return res.redirect('/runs?warning=That run was not found.');
+  const existing = await query('SELECT run_id FROM replenishment_runs WHERE run_id = $1', [id]);
+  if (!existing.rowCount) return res.redirect('/runs?warning=That run was not found.');
+  const visible = await query(
+    `SELECT 1 FROM replenishment_runs rr WHERE rr.run_id = $1 AND ${runScopeSql('rr', 2)}`,
+    [id, ...scopeBinds(req.user)]
+  );
+  if (!visible.rowCount) return deny(req, res);
+  const deleted = await query(
+    `DELETE FROM replenishment_runs rr WHERE rr.run_id = $1 AND ${runScopeSql('rr', 2)}`,
+    [id, ...scopeBinds(req.user)]
+  );
+  if (!deleted.rowCount) return deny(req, res);
   await recordChange(req, {
     action: 'delete',
     entity: 'replenishment run',

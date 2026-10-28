@@ -1,9 +1,51 @@
 const { normalizeLoads } = require('../lib/loads');
-const { isIsoDate, intOrNull, inr } = require('../http');
+const { asArray, isIsoDate, intOrNull, inr } = require('../http');
+const { atmScopeSql, locationScopeSql } = require('../auth/permissions');
 
 const RUN_STATUSES = new Set(['planned', 'in_progress', 'completed', 'cancelled']);
 
-async function saveRun(client, body, runId = null) {
+function scopeActive(scope) {
+  return Array.isArray(scope) && scope.some((value) => value != null);
+}
+
+async function runTargetsOutOfScope(client, body, scope, runId = null) {
+  if (!scopeActive(scope)) return false;
+  const locationId = intOrNull(body.location_id);
+  if (locationId) {
+    const exists = await client.query('SELECT 1 FROM locations WHERE location_id = $1', [locationId]);
+    if (exists.rowCount) {
+      const allowed = await client.query(
+        `SELECT 1 FROM locations l WHERE l.location_id = $1 AND ${locationScopeSql('l', 2)}`,
+        [locationId, ...scope]
+      );
+      if (!allowed.rowCount) return true;
+    }
+  }
+  let codes = [...new Set(asArray(body.atm_code).map((code) => String(code || '').trim().toUpperCase()).filter(Boolean))];
+  if (runId && codes.length) {
+    const current = await client.query(
+      `SELECT a.atm_code
+       FROM cassette_loads cl
+       JOIN atms a ON a.atm_id = cl.atm_id
+       WHERE cl.run_id = $1`,
+      [runId]
+    );
+    const keep = new Set(current.rows.map((row) => row.atm_code));
+    codes = codes.filter((code) => !keep.has(code));
+  }
+  if (!codes.length) return false;
+  const outside = await client.query(
+    `SELECT a.atm_id
+     FROM atms a
+     WHERE a.atm_code = ANY($1::text[])
+       AND a.atm_id NOT IN (${atmScopeSql(2)})`,
+    [codes, ...scope]
+  );
+  return outside.rowCount > 0;
+}
+
+async function saveRun(client, body, runId = null, scope = null) {
+  if (await runTargetsOutOfScope(client, body, scope, runId)) return { denied: true };
   const errors = [];
   const locationId = intOrNull(body.location_id);
   const vanId = intOrNull(body.van_id);
@@ -147,4 +189,4 @@ async function saveRun(client, body, runId = null) {
   return { runId: id, total: normalized.total };
 }
 
-module.exports = { saveRun, RUN_STATUSES };
+module.exports = { saveRun, runTargetsOutOfScope, RUN_STATUSES };

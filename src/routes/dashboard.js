@@ -2,7 +2,7 @@ const express = require('express');
 const { query } = require('../db');
 const { asyncRoute, renderPage } = require('../http');
 const { requireCan } = require('../auth/gate');
-const { scopeBinds, atmScopeSql } = require('../auth/permissions');
+const { scopeBinds, atmScopeSql, runScopeSql } = require('../auth/permissions');
 const { lastEightWeeks } = require('../lib/windows');
 const { getSimulatorStatus } = require('../services/simulator');
 const { hoursToEmpty, runsOutWithinDay } = require('../services/cashout');
@@ -10,6 +10,8 @@ const { hoursToEmpty, runsOutWithinDay } = require('../services/cashout');
 const router = express.Router();
 
 router.get('/', requireCan('dashboard'), asyncRoute(async (req, res) => {
+  const scope = scopeBinds(req.user);
+  const inScope = atmScopeSql(1);
   const [fleet, tickets, runs, dispensed, byLocation, byDay, byWeekday, worst, recentTickets, alerts, alertCount, downtimeOpen, downtimeCount, cashoutRows, slaBreaches] = await Promise.all([
     query(`SELECT
              COUNT(*)::int AS atms,
@@ -17,24 +19,29 @@ router.get('/', requireCan('dashboard'), asyncRoute(async (req, res) => {
              COUNT(*) FILTER (WHERE downtime_pct > 5)::int AS above_five,
              COUNT(*) FILTER (WHERE status = 'cash_out')::int AS cash_out,
              COUNT(*) FILTER (WHERE status = 'out_of_service')::int AS out_of_service
-           FROM v_atm_downtime_mtd`),
+           FROM v_atm_downtime_mtd
+           WHERE atm_id IN (${inScope})`, scope),
     query(`SELECT
              COUNT(*) FILTER (WHERE status <> 'closed')::int AS open_tickets,
              COUNT(*) FILTER (WHERE source = 'trigger' AND status <> 'closed')::int AS open_variances
-           FROM fault_tickets`),
+           FROM fault_tickets
+           WHERE atm_id IN (${inScope})`, scope),
     query(`SELECT
              COUNT(*) FILTER (WHERE planned_date = CURRENT_DATE AND status <> 'cancelled')::int AS today_runs,
              COUNT(*) FILTER (WHERE planned_date = CURRENT_DATE + 1 AND status = 'planned')::int AS tomorrow_planned
-           FROM replenishment_runs`),
+           FROM replenishment_runs rr
+           WHERE ${runScopeSql('rr', 1)}`, scope),
     query(`SELECT COALESCE(SUM(amount), 0) AS amount, COALESCE(SUM(txn_count), 0)::int AS txns
            FROM daily_withdrawals
-           WHERE withdrawal_date = CURRENT_DATE - 1`),
+           WHERE withdrawal_date = CURRENT_DATE - 1
+             AND atm_id IN (${inScope})`, scope),
     query(`SELECT location_name,
                   ROUND(AVG(downtime_pct)::numeric, 2) AS downtime_pct,
                   LEAST(100, GREATEST(0, ROUND((100 - AVG(downtime_pct))::numeric, 2))) AS uptime_pct
            FROM v_atm_downtime_mtd
+           WHERE atm_id IN (${inScope})
            GROUP BY location_id, location_name
-           ORDER BY location_name`),
+           ORDER BY location_name`, scope),
     query(`WITH days AS (
              SELECT gs::date AS day,
                     (gs::date::timestamp AT TIME ZONE 'Asia/Kolkata') AS day_start,
@@ -52,6 +59,7 @@ router.get('/', requireCan('dashboard'), asyncRoute(async (req, res) => {
              JOIN downtime_log d
                ON d.started_at < days.day_end
               AND COALESCE(d.ended_at, CURRENT_TIMESTAMP) > days.day_start
+              AND d.atm_id IN (${inScope})
            ),
            ordered AS (
              SELECT day, atm_id, downtime_id, started_at, ended_at,
@@ -87,51 +95,57 @@ router.get('/', requireCan('dashboard'), asyncRoute(async (req, res) => {
            FROM days
            LEFT JOIN merged ON merged.day = days.day
            GROUP BY days.day
-           ORDER BY days.day`),
+           ORDER BY days.day`, scope),
     query(`SELECT EXTRACT(DOW FROM withdrawal_date)::int AS dow, COALESCE(SUM(amount), 0) AS amount
            FROM daily_withdrawals
            WHERE ${lastEightWeeks('withdrawal_date')}
-           GROUP BY 1`),
+             AND atm_id IN (${inScope})
+           GROUP BY 1`, scope),
     query(`SELECT atm_id, atm_code, site_name, location_name, city, downtime_pct, status
            FROM v_atm_downtime_mtd
+           WHERE atm_id IN (${inScope})
            ORDER BY downtime_pct DESC, atm_code
-           LIMIT 8`),
+           LIMIT 8`, scope),
     query(`SELECT ft.ticket_no, ft.title, ft.category, ft.priority, ft.status, ft.opened_at, a.atm_code, ft.ticket_id
            FROM fault_tickets ft
            JOIN atms a ON a.atm_id = ft.atm_id
+           WHERE ft.atm_id IN (${inScope})
            ORDER BY ft.opened_at DESC
-           LIMIT 6`),
+           LIMIT 6`, scope),
     query(`SELECT r.request_id, r.current_cash, r.capacity_amount, r.threshold_pct, r.created_at,
                   a.atm_id, a.atm_code, a.site_name
            FROM replenishment_requests r
            JOIN atms a ON a.atm_id = r.atm_id
            WHERE r.status = 'open'
+             AND a.atm_id IN (${inScope})
            ORDER BY r.created_at DESC
-           LIMIT 8`),
-    query(`SELECT COUNT(*)::int AS n FROM replenishment_requests WHERE status = 'open'`),
+           LIMIT 8`, scope),
+    query(`SELECT COUNT(*)::int AS n FROM replenishment_requests WHERE status = 'open' AND atm_id IN (${inScope})`, scope),
     query(`SELECT d.downtime_id, d.started_at, d.reason, a.atm_id, a.atm_code
            FROM downtime_log d
            JOIN atms a ON a.atm_id = d.atm_id
            WHERE d.ended_at IS NULL
+             AND d.atm_id IN (${inScope})
            ORDER BY d.started_at DESC
-           LIMIT 6`),
-    query(`SELECT COUNT(*)::int AS n FROM downtime_log WHERE ended_at IS NULL`),
+           LIMIT 6`, scope),
+    query(`SELECT COUNT(*)::int AS n FROM downtime_log WHERE ended_at IS NULL AND atm_id IN (${inScope})`, scope),
     query(
       `SELECT a.atm_id, a.atm_code, a.site_name, a.current_cash,
               forecast_cash(a.atm_id, CURRENT_DATE + 1) AS forecast
        FROM atms a
        WHERE a.status <> 'decommissioned'
-         AND a.atm_id IN (${atmScopeSql(1)})`,
-      scopeBinds(req.user)
+         AND a.atm_id IN (${inScope})`,
+      scope
     ),
     query(`SELECT COUNT(*)::int AS n
            FROM fault_tickets ft
            JOIN sla_targets s ON s.category = sla_category(ft.category)
            WHERE ft.status <> 'closed'
+             AND ft.atm_id IN (${inScope})
              AND (
                EXTRACT(EPOCH FROM (COALESCE(ft.responded_at, CURRENT_TIMESTAMP) - ft.opened_at)) / 3600 > s.response_hours
                OR EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - ft.opened_at)) / 3600 > s.resolution_hours
-             )`),
+             )`, scope),
   ]);
 
   const fleetRow = fleet.rows[0] || {};

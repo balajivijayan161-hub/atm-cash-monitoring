@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { parseSwitchFile } = require('../lib/switchFile');
+const { atmScopeSql } = require('../auth/permissions');
 const { applyIngestionRules } = require('./ingestionRules');
 
 const SOURCES = new Set(['manual', 'schedule', 'simulator']);
@@ -11,6 +12,7 @@ async function importSwitchContent(client, {
   source = 'manual',
   contentSha256 = null,
   rules,
+  scope = null,
 } = {}) {
   const todayRes = await client.query('SELECT CURRENT_DATE::text AS today');
   const today = todayRes.rows[0].today;
@@ -32,11 +34,27 @@ async function importSwitchContent(client, {
     }
   }
 
+  let allowedCodes = null;
+  if (Array.isArray(scope) && scope.some((value) => value != null) && codes.length) {
+    const allowed = await client.query(
+      `SELECT a.atm_code
+       FROM atms a
+       WHERE a.atm_code = ANY($1::text[])
+         AND a.atm_id IN (${atmScopeSql(2)})`,
+      [codes, ...scope]
+    );
+    allowedCodes = new Set(allowed.rows.map((row) => row.atm_code));
+  }
+
   for (const row of parsed.rows) {
     if (row.error || !row.atmCode) continue;
     const atm = codeMap.get(row.atmCode);
     if (!atm) {
       row.error = `Unknown ATM code ${row.atmCode}.`;
+      continue;
+    }
+    if (allowedCodes && !allowedCodes.has(row.atmCode)) {
+      row.error = 'That ATM is outside your area.';
       continue;
     }
     row.atmId = atm.atmId;

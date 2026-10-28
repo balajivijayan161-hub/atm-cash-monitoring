@@ -1,7 +1,7 @@
 const express = require('express');
 const { query } = require('../db');
 const { asyncRoute, renderPage, intOrNull, likePattern, pageWindow } = require('../http');
-const { scopeBinds, atmScopeSql } = require('../auth/permissions');
+const { scopeBinds, atmScopeSql, locationScopeSql } = require('../auth/permissions');
 const { deny, guard } = require('../auth/gate');
 
 const router = express.Router();
@@ -33,7 +33,13 @@ router.get('/atms', asyncRoute(async (req, res) => {
        ${where}`,
       filters
     ),
-    query('SELECT location_id, location_name FROM locations ORDER BY location_name'),
+    query(
+      `SELECT l.location_id, l.location_name
+       FROM locations l
+       WHERE ${locationScopeSql('l', 1)}
+       ORDER BY l.location_name`,
+      scopeBinds(req.user)
+    ),
   ]);
   const total = count.rows[0].total;
   const window = pageWindow(req.query.page, PAGE_SIZE, total);

@@ -70,7 +70,8 @@ function browserJar() {
 async function submitRenderedForm(pageHtml, form, values) {
   assert.equal(form.method, 'post');
   assert.equal(form.enctype, 'application/x-www-form-urlencoded');
-  assert.doesNotMatch(pageHtml, /<script\b/i);
+  assert.doesNotMatch(pageHtml, /<script\b(?![^>]*\bsrc\s*=\s*["'][^"']+["'])[^>]*>/i);
+  assert.doesNotMatch(pageHtml, /\son[a-z]+\s*=/i);
   const body = new URLSearchParams();
   for (const input of form.inputs) {
     if (input.type === 'password' || /password/i.test(input.name)) body.set(input.name, values.password);

@@ -17,7 +17,7 @@ function weekdayName(iso) {
 }
 
 router.get('/forecast', asyncRoute(async (req, res) => {
-  const ref = await loadReference();
+  const ref = await loadReference(req.user);
   const dates = await query(`SELECT CURRENT_DATE::text AS today, (CURRENT_DATE + 1)::text AS tomorrow`);
   const atmId = intOrNull(req.query.atm_id);
   const targetDate = typeof req.query.date === 'string' ? req.query.date : dates.rows[0].tomorrow;
@@ -27,6 +27,15 @@ router.get('/forecast', asyncRoute(async (req, res) => {
     if (!atmId) error = 'Choose an ATM.';
     else if (!isIsoDate(targetDate)) error = 'Choose a valid date.';
     else {
+      const allowed = await query(
+        `SELECT 1 FROM atms a WHERE a.atm_id = $1 AND a.atm_id IN (${atmScopeSql(2)})`,
+        [atmId, ...scopeBinds(req.user)]
+      );
+      if (!allowed.rowCount) {
+        const exists = await query('SELECT 1 FROM atms WHERE atm_id = $1', [atmId]);
+        if (exists.rowCount) return deny(req, res);
+        error = 'That ATM was not found.';
+      } else {
       const [forecast, points, atm] = await Promise.all([
         query('SELECT forecast_cash($1, $2::date) AS forecast', [atmId, targetDate]),
         query('SELECT withdrawal_date::text AS withdrawal_date, amount, txn_count FROM forecast_cash_points($1, $2::date)', [atmId, targetDate]),
@@ -41,11 +50,6 @@ router.get('/forecast', asyncRoute(async (req, res) => {
       ]);
       if (!atm.rowCount) error = 'That ATM was not found.';
       else {
-        const allowed = await query(
-          `SELECT 1 FROM atms a WHERE a.atm_id = $1 AND a.atm_id IN (${atmScopeSql(2)})`,
-          [atmId, ...scopeBinds(req.user)]
-        );
-        if (!allowed.rowCount) return deny(req, res);
         const forecastAmount = Number(forecast.rows[0].forecast);
         const current = Number(atm.rows[0].current_cash);
         const factor = await query('SELECT forecast_multiplier($1::date) AS factor', [targetDate]);
@@ -61,12 +65,13 @@ router.get('/forecast', asyncRoute(async (req, res) => {
           suggestion,
         };
       }
+      }
     }
   }
   const groups = ref.locations.map((location) => ({
     ...location,
     atms: ref.atms.filter((atm) => atm.location_id === location.location_id),
-  }));
+  })).filter((group) => group.atms.length);
   renderPage(req, res, 'forecast', {
     title: 'Cash Forecast',
     groups,
@@ -81,11 +86,22 @@ router.get('/forecast', asyncRoute(async (req, res) => {
 
 router.get('/forecast/accuracy', asyncRoute(async (req, res) => {
   const windowDays = req.query.window === '28' ? 28 : 7;
-  const atmId = intOrNull(req.query.atm_id);
-  const ref = await loadReference();
+  let atmId = intOrNull(req.query.atm_id);
+  const ref = await loadReference(req.user);
   let rows = [];
   let errorPct = null;
   let chart = { labels: [], forecast: [], actual: [] };
+  if (atmId) {
+    const allowed = await query(
+      `SELECT 1 FROM atms a WHERE a.atm_id = $1 AND a.atm_id IN (${atmScopeSql(2)})`,
+      [atmId, ...scopeBinds(req.user)]
+    );
+    if (!allowed.rowCount) {
+      const exists = await query('SELECT 1 FROM atms WHERE atm_id = $1', [atmId]);
+      if (exists.rowCount) return deny(req, res);
+      atmId = null;
+    }
+  }
   if (atmId) {
     const series = await query(
       `SELECT day::date::text AS day,

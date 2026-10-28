@@ -81,6 +81,29 @@ function atmScopeSql(start) {
       ))`;
 }
 
+function locationScopeSql(alias, start) {
+  const region = start;
+  const branch = start + 1;
+  const custodian = start + 2;
+  const engineer = start + 3;
+  return `($${region}::text IS NULL OR ${alias}.region = $${region})
+    AND ($${branch}::int IS NULL OR EXISTS (
+      SELECT 1 FROM branches scope_branch
+      WHERE scope_branch.branch_id = $${branch}
+        AND scope_branch.location_id = ${alias}.location_id
+    ))
+    AND (
+      ($${custodian}::int IS NULL AND $${engineer}::int IS NULL)
+      OR EXISTS (
+        SELECT 1
+        FROM atms scope_atm
+        JOIN branches scope_atm_branch ON scope_atm_branch.branch_id = scope_atm.branch_id
+        WHERE scope_atm_branch.location_id = ${alias}.location_id
+          AND scope_atm.atm_id IN (${atmScopeSql(start)})
+      )
+    )`;
+}
+
 function runScopeSql(alias, start) {
   const region = start;
   const branch = start + 1;
@@ -107,5 +130,6 @@ module.exports = {
   permissionFlags,
   scopeBinds,
   atmScopeSql,
+  locationScopeSql,
   runScopeSql,
 };
