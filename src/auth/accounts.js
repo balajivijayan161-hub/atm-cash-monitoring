@@ -83,13 +83,19 @@ async function seedAccessUsers(client) {
   }
 }
 
+function recoveryEnabled() {
+  return process.env.ADMIN_RECOVERY === 'true';
+}
+
 async function setupOpen(db) {
   const runner = db || { query };
   if (!envSecret('SETUP_TOKEN')) return false;
   const row = await runner.query(
     `SELECT password_hash IS NULL AS open FROM users WHERE username = 'superadmin'`
   );
-  return Boolean(row.rows[0] && row.rows[0].open);
+  if (!row.rowCount) return false;
+  if (recoveryEnabled()) return true;
+  return Boolean(row.rows[0].open);
 }
 
 function lockoutSeconds(lockedUntil, now = new Date()) {
@@ -105,4 +111,12 @@ async function endUserSessions(userId) {
   );
 }
 
-module.exports = { seedAccessUsers, lockoutSeconds, DEMO_USERS, envSecret, setupOpen, endUserSessions };
+module.exports = {
+  seedAccessUsers,
+  lockoutSeconds,
+  DEMO_USERS,
+  envSecret,
+  setupOpen,
+  recoveryEnabled,
+  endUserSessions,
+};

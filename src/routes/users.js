@@ -35,7 +35,10 @@ function passwordError(form, { required }) {
 
 router.get('/users', requireCan('manageUsers'), asyncRoute(async (req, res) => {
   const rows = await query(
-    `SELECT user_id, username, full_name, role, region, active, password_hash IS NOT NULL AS has_password
+    `SELECT user_id, username, full_name, role, region, active,
+            password_hash IS NOT NULL AS has_password,
+            failed_attempts,
+            locked_until > CURRENT_TIMESTAMP AS locked
      FROM users ORDER BY username`
   );
   renderPage(req, res, 'users', { title: 'User Accounts', rows: rows.rows, roleLabel });
@@ -103,6 +106,34 @@ router.get('/users/:id', requireCan('manageUsers'), asyncRoute(async (req, res) 
     roleLabel,
     errors: [],
   });
+}));
+
+router.post('/users/:id/unlock', requireCan('manageUsers'), asyncRoute(async (req, res) => {
+  const id = intOrNull(req.params.id);
+  if (!id) return res.redirect('/users?warning=That user was not found.');
+  const existing = await query(
+    `SELECT username, failed_attempts, locked_until FROM users WHERE user_id = $1`,
+    [id]
+  );
+  if (!existing.rowCount) return res.redirect('/users?warning=That user was not found.');
+  await query(
+    `UPDATE users
+     SET failed_attempts = 0, locked_until = NULL, updated_at = CURRENT_TIMESTAMP
+     WHERE user_id = $1`,
+    [id]
+  );
+  await recordChange(req, {
+    action: 'update',
+    entity: 'user',
+    entityId: id,
+    before: {
+      username: existing.rows[0].username,
+      failed_attempts: existing.rows[0].failed_attempts,
+      locked_until: existing.rows[0].locked_until,
+    },
+    after: { username: existing.rows[0].username, failed_attempts: 0, locked_until: null },
+  });
+  res.redirect('/users?notice=Account unlocked.');
 }));
 
 router.post('/users/:id/password', requireCan('manageUsers'), asyncRoute(async (req, res) => {

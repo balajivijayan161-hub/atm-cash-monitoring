@@ -19,6 +19,7 @@ before(async () => {
 
 after(async () => {
   delete process.env.SETUP_TOKEN;
+  delete process.env.ADMIN_RECOVERY;
   if (server) await new Promise((resolve) => server.close(resolve));
 });
 
@@ -148,5 +149,76 @@ test('first-run setup is one time, and a super admin can set another password', 
   } finally {
     await pool.query(`UPDATE users SET password_hash = $1 WHERE username = 'superadmin'`, [original.rows[0].password_hash]);
     delete process.env.SETUP_TOKEN;
+    delete process.env.ADMIN_RECOVERY;
+  }
+});
+
+test('ADMIN_RECOVERY resets an existing superadmin password and clears lockout', async () => {
+  const original = await pool.query(`SELECT user_id, password_hash FROM users WHERE username = 'superadmin'`);
+  const id = original.rows[0].user_id;
+  const sid = `recovery-test-${id}`;
+  await pool.query(
+    `UPDATE users SET failed_attempts = 5, locked_until = CURRENT_TIMESTAMP + interval '30 minutes' WHERE user_id = $1`,
+    [id]
+  );
+  await pool.query(
+    `INSERT INTO session (sid, sess, expire) VALUES ($1, $2::json, CURRENT_TIMESTAMP + interval '1 hour')`,
+    [sid, JSON.stringify({ user: { user_id: id } })]
+  );
+  process.env.SETUP_TOKEN = 'recover-token';
+  process.env.ADMIN_RECOVERY = 'TRUE';
+  try {
+    assert.equal((await createAgent(base).get('/setup')).status, 404);
+    process.env.ADMIN_RECOVERY = 'true';
+    const agent = createAgent(base);
+    assert.equal((await agent.get('/setup')).status, 200);
+    const bad = await agent.post('/setup', {
+      setup_token: 'nope',
+      password: 'Recover-Horse-1',
+      password_confirm: 'Recover-Horse-1',
+    });
+    assert.equal(bad.status, 401);
+    const done = await agent.post('/setup', {
+      setup_token: 'recover-token',
+      password: 'Recover-Horse-1',
+      password_confirm: 'Recover-Horse-1',
+    });
+    assert.equal(done.status, 302);
+    const state = await pool.query(`SELECT failed_attempts, locked_until FROM users WHERE user_id = $1`, [id]);
+    assert.equal(state.rows[0].failed_attempts, 0);
+    assert.equal(state.rows[0].locked_until, null);
+    const sessions = await pool.query(`SELECT 1 FROM session WHERE sid = $1`, [sid]);
+    assert.equal(sessions.rowCount, 0);
+    assert.equal((await createAgent(base).login('superadmin', 'Recover-Horse-1')).status, 302);
+    const log = await pool.query(
+      `SELECT changes::text AS changes FROM change_log WHERE entity = 'first-run setup' ORDER BY change_id DESC LIMIT 3`
+    );
+    const blob = log.rows.map((row) => row.changes).join('\n');
+    assert.match(blob, /password reset/);
+    assert.doesNotMatch(blob, /recover-token/);
+    assert.doesNotMatch(blob, /Recover-Horse/);
+
+    await pool.query(
+      `UPDATE users SET failed_attempts = 4, locked_until = CURRENT_TIMESTAMP + interval '10 minutes' WHERE username = 'clerk'`
+    );
+    const admin = createAgent(base);
+    assert.equal((await admin.login('superadmin', 'Recover-Horse-1')).status, 302);
+    const users = await admin.get('/users');
+    assert.match(users.text, /Unlock/);
+    const clerk = await pool.query(`SELECT user_id FROM users WHERE username = 'clerk'`);
+    const unlocked = await admin.post(`/users/${clerk.rows[0].user_id}/unlock`, {});
+    assert.match(unlocked.location, /unlocked/i);
+    const clerkState = await pool.query(`SELECT failed_attempts, locked_until FROM users WHERE username = 'clerk'`);
+    assert.equal(clerkState.rows[0].failed_attempts, 0);
+    assert.equal(clerkState.rows[0].locked_until, null);
+  } finally {
+    await pool.query(
+      `UPDATE users SET password_hash = $1, failed_attempts = 0, locked_until = NULL WHERE user_id = $2`,
+      [original.rows[0].password_hash, id]
+    );
+    await pool.query(`UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE username = 'clerk'`);
+    await pool.query(`DELETE FROM session WHERE sid = $1`, [sid]);
+    delete process.env.SETUP_TOKEN;
+    delete process.env.ADMIN_RECOVERY;
   }
 });

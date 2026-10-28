@@ -16,7 +16,15 @@
           <td data-label="Username"><%= row.username %></td>
           <td data-label="Role"><%= roleLabel(row.role) %></td>
           <td data-label="Region"><%= row.region || 'All Regions' %></td>
-          <td data-label="Status"><%= row.active ? 'Active' : 'Disabled' %><% if (!row.has_password) { %><br><span class="hint">No password</span><% } %></td>
+          <td data-label="Status">
+            <%= row.active ? 'Active' : 'Disabled' %>
+            <% if (!row.has_password) { %><br><span class="hint">No password</span><% } %>
+            <% if (row.locked) { %><br><span class="hint">Locked</span><% } %>
+            <form method="post" action="/users/<%= row.user_id %>/unlock">
+              <%- csrfField %>
+              <button class="btn" type="submit">Unlock</button>
+            </form>
+          </td>
           <td data-label="Set Password">
             <form method="post" action="/users/<%= row.user_id %>/password">
               <%- csrfField %>

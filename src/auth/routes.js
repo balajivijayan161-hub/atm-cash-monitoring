@@ -1,7 +1,7 @@
 const express = require('express');
 const { query } = require('../db');
 const { checkPassword, hashPassword, passwordHints, secretMatch } = require('./password');
-const { lockoutSeconds, setupOpen, envSecret } = require('./accounts');
+const { lockoutSeconds, setupOpen, envSecret, recoveryEnabled, endUserSessions } = require('./accounts');
 const { writeSessionEvent, clientIp, recordUnsignedChange } = require('./activity');
 const { tooManyLoginAttempts, ABSOLUTE_MS } = require('./gate');
 const { renderPage } = require('../http');
@@ -56,7 +56,7 @@ router.post('/setup', async (req, res, next) => {
   try {
     if (!(await setupOpen())) return setupDisabled(res);
     const account = await query(
-      `SELECT user_id FROM users WHERE username = 'superadmin' AND password_hash IS NULL`
+      `SELECT user_id FROM users WHERE username = 'superadmin'`
     );
     const userId = account.rows[0] ? account.rows[0].user_id : null;
     const token = String(req.body.setup_token || '');
@@ -79,12 +79,13 @@ router.post('/setup', async (req, res, next) => {
     const saved = await query(
       `UPDATE users
        SET password_hash = $1, failed_attempts = 0, locked_until = NULL, updated_at = CURRENT_TIMESTAMP
-       WHERE username = 'superadmin' AND password_hash IS NULL
+       WHERE username = 'superadmin' AND ($2::boolean OR password_hash IS NULL)
        RETURNING user_id`,
-      [await hashPassword(password)]
+      [await hashPassword(password), recoveryEnabled()]
     );
     if (!saved.rowCount) return setupDisabled(res);
-    await logSetup(req, 'password set', saved.rows[0].user_id);
+    await endUserSessions(saved.rows[0].user_id);
+    await logSetup(req, recoveryEnabled() ? 'password reset' : 'password set', saved.rows[0].user_id);
     return res.redirect('/login?setup=done');
   } catch (err) {
     return next(err);

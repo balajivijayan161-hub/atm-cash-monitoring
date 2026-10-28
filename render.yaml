@@ -42,3 +42,5 @@ services:
         sync: false
       - key: SETUP_TOKEN
         sync: false
+      - key: ADMIN_RECOVERY
+        sync: false

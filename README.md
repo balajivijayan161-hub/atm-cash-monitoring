@@ -21,7 +21,7 @@ The process listens on `PORT` (default **43123**). On first start against an emp
 
 `GET /health` returns JSON: `{ "status": "ok", "db": "up", "atms": 450, ... }`.
 
-Signed-in accounts are seeded on startup. For local development, set `ADMIN_PASSWORD` for `superadmin` and `DEMO_PASSWORD` for `regional.manager`, `branch.manager`, `clerk`, `custodian`, and `engineer`. If `ADMIN_PASSWORD` is unset, `superadmin` has no password until someone opens `/setup` with `SETUP_TOKEN`. If `DEMO_PASSWORD` is unset, the other accounts cannot sign in until a Super Admin sets a password on User Accounts. Set `SESSION_SECRET` as well. On Render, set `SESSION_SECRET` and `SETUP_TOKEN`; leave the password variables unset if you do not want them stored there.
+Signed-in accounts are seeded on startup. For local development, set `ADMIN_PASSWORD` for `superadmin` and `DEMO_PASSWORD` for `regional.manager`, `branch.manager`, `clerk`, `custodian`, and `engineer`. If `ADMIN_PASSWORD` is unset, `superadmin` has no password until someone opens `/setup` with `SETUP_TOKEN`. Set `ADMIN_RECOVERY` to `true` only to replace an existing Super Admin password from that same page, then remove it. If `DEMO_PASSWORD` is unset, the other accounts cannot sign in until a Super Admin sets a password on User Accounts. Set `SESSION_SECRET` as well. On Render, set `SESSION_SECRET` and `SETUP_TOKEN`; leave the password variables unset if you do not want them stored there.
 
 Tests use the same `DATABASE_URL` and roll back their own rows:
 
