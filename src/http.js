@@ -60,10 +60,10 @@ function renderPage(req, res, view, data = {}) {
 function errorDocument(err) {
   console.error(err);
   const detail = process.env.NODE_ENV === 'production' ? '' : `<pre>${escapeHtml(err.message || String(err))}</pre>`;
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Ledger error</title>
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Request failed</title>
   <link rel="stylesheet" href="/css/app.css"></head><body>
-  <main class="content"><h1>The ledger could not complete that request.</h1>
-  <p>Refresh the page. If you just started the app, the database may still be loading.</p>
+  <main class="content"><h1>That request could not be completed.</h1>
+  <p>Refresh the page and try again.</p>
   ${detail}</main></body></html>`;
 }
 

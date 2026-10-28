@@ -2,7 +2,7 @@
   <div>
     <p class="eyebrow"><%= batch.file_format %> · <%= label(batch.status) %></p>
     <h1><%= batch.filename %></h1>
-    <p class="lede"><%= batch.loaded_count %> loaded, <%= batch.error_count %> rejected, of <%= batch.row_count %> staged rows. Uploaded <%= prettyDateTime(batch.uploaded_at) %>.</p>
+    <p class="lede"><%= batch.loaded_count %> loaded, <%= batch.error_count %> rejected, of <%= batch.row_count %> rows. Uploaded <%= prettyDateTime(batch.uploaded_at) %>.</p>
   </div>
   <a class="btn" href="/switch">Load another file</a>
 </header>

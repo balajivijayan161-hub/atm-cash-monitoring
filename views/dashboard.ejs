@@ -93,7 +93,7 @@
         </thead>
         <tbody>
           <% if (!worst.length) { %>
-            <tr><td colspan="4" class="empty">No ATMs on the ledger yet.</td></tr>
+            <tr><td colspan="4" class="empty">No ATMs yet.</td></tr>
           <% } %>
           <% worst.forEach((row) => { %>
             <tr>
@@ -132,15 +132,15 @@
 <section class="section">
   <h2>Where the work is</h2>
   <div class="link-grid">
-    <a href="/forecast"><strong>Cash forecast</strong><span>Calls forecast_cash for one ATM and shows the four same-weekday withdrawals behind it.</span></a>
-    <a href="/runs"><strong>Plan replenishment</strong><span>plan_replenishment_routes groups ATMs whose forecast exceeds remaining cash onto vans and custodians.</span></a>
-    <a href="/runs/new"><strong>Cassette loads</strong><span>Master run with detail rows. Total loaded recalculates as note counts change.</span></a>
-    <a href="/reconciliations/new"><strong>Reconciliation trigger</strong><span>A non-zero expected-versus-counted difference raises a fault ticket in the database.</span></a>
+    <a href="/forecast"><strong>Cash forecast</strong><span>Expected cash need for one ATM, from the same weekday over the last four weeks.</span></a>
+    <a href="/runs"><strong>Plan replenishment</strong><span>Groups ATMs whose forecast exceeds remaining cash onto vans and custodians.</span></a>
+    <a href="/runs/new"><strong>Cassette loads</strong><span>A run with one row per cassette. Total loaded updates as note counts change.</span></a>
+    <a href="/reconciliations/new"><strong>Reconciliation</strong><span>When the counted cash does not match the expected total, a fault ticket is opened.</span></a>
     <a href="/reports/downtime-atms"><strong>Downtime above 5%</strong><span>ATMs whose month-to-date outage exceeds 5% of elapsed minutes.</span></a>
     <a href="/reports/van-cashouts"><strong>Van cash-outs</strong><span>Each cash-out ticket counted once, against the van that last serviced the ATM on or before that day.</span></a>
     <a href="/reports/withdrawal-matrix"><strong>ATM × weekday</strong><span>Withdrawal totals for the last eight weeks, one location at a time.</span></a>
     <a href="/reports/downtime-by-location"><strong>Downtime by location</strong><span>Outage minutes and uptime rolled up to each city.</span></a>
-    <a href="/switch"><strong>Switch file load</strong><span>Validate, stage, and post a CSV or fixed-width file into daily withdrawals.</span></a>
+    <a href="/switch"><strong>Switch file load</strong><span>Check a CSV or fixed-width file and save the valid withdrawal totals.</span></a>
   </div>
 </section>
 

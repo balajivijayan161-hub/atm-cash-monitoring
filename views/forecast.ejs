@@ -1,8 +1,8 @@
 <header class="page-head">
   <div>
-    <p class="eyebrow">forecast_cash</p>
+    <p class="eyebrow">Same weekday</p>
     <h1>Cash forecast</h1>
-    <p class="lede">The database function averages this ATM’s withdrawals on the same weekday across the previous 28 days. That is up to four observations.</p>
+    <p class="lede">The forecast is this ATM’s average withdrawal on the same weekday over the previous 28 days, up to four weeks.</p>
   </div>
 </header>
 <form class="filters" method="get" action="/forecast">
@@ -24,7 +24,7 @@
   <button class="btn btn-primary" type="submit">Forecast</button>
 </form>
 <% if (error) { %><p class="banner bad" role="alert"><%= error %></p><% } %>
-<% if (!groups.length) { %><p class="empty">No ATMs are on the ledger yet.</p><% } %>
+<% if (!groups.length) { %><p class="empty">No ATMs yet.</p><% } %>
 <% if (result) { %>
   <section class="kpi-grid">
     <article class="kpi">
@@ -50,7 +50,7 @@
         <thead><tr><th>Withdrawal date</th><th>Weekday</th><th class="num">Amount</th><th class="num">Transactions</th></tr></thead>
         <tbody>
           <% if (!result.points.length) { %>
-            <tr><td colspan="4" class="empty">No same-weekday history in the prior 28 days. The function returns zero.</td></tr>
+            <tr><td colspan="4" class="empty">No same-weekday history in the prior 28 days, so the forecast is zero.</td></tr>
           <% } %>
           <% result.points.forEach((point) => { %>
             <tr>

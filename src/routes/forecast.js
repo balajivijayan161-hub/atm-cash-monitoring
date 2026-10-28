@@ -34,7 +34,7 @@ router.get('/forecast', asyncRoute(async (req, res) => {
           [atmId]
         ),
       ]);
-      if (!atm.rowCount) error = 'That ATM is not on the ledger.';
+      if (!atm.rowCount) error = 'That ATM was not found.';
       else {
         const forecastAmount = Number(forecast.rows[0].forecast);
         const current = Number(atm.rows[0].current_cash);

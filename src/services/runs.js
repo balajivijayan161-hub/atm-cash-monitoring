@@ -26,7 +26,7 @@ async function saveRun(client, body, runId = null) {
       'SELECT van_id, location_id, status FROM cash_vans WHERE van_id = $1',
       [vanId]
     );
-    if (!vanRes.rowCount) errors.push('That cash van is not on the ledger.');
+    if (!vanRes.rowCount) errors.push('That cash van was not found.');
     else if (vanRes.rows[0].status === 'maintenance') errors.push('That cash van is in maintenance.');
     else if (vanRes.rows[0].location_id !== locationId) errors.push('The van is based in a different location.');
   }
@@ -56,7 +56,7 @@ async function saveRun(client, body, runId = null) {
   for (const line of normalized.lines) {
     if (!line.amount) continue;
     const atm = atmMap.get(line.atmCode);
-    if (!atm) errors.push(`${line.atmCode} is not an ATM on this ledger.`);
+    if (!atm) errors.push(`${line.atmCode} is not a known ATM.`);
     else if (locationId && atm.location_id !== locationId) errors.push(`${line.atmCode} is not in the selected location.`);
     else line.atmId = atm.atm_id;
   }

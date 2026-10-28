@@ -1,8 +1,8 @@
 <header class="page-head">
   <div>
-    <p class="eyebrow">Master and detail</p>
+    <p class="eyebrow">Cassette loads</p>
     <h1><%= run ? 'Edit replenishment run' : 'New replenishment run' %></h1>
-    <p class="lede">The run is the master. Each row is one cassette. Total loaded is denomination times note count, summed across the rows, and it updates as you type.</p>
+    <p class="lede">Each row is one cassette on this trip. Total loaded is denomination times note count, and it updates as you type.</p>
   </div>
 </header>
 <% if (errors.length) { %>
@@ -95,7 +95,7 @@
       <p class="total-label">Total loaded</p>
       <p id="total-loaded" class="total-value" aria-live="polite"><%= inr(total) %></p>
       <p class="hint">Sum of denomination × note count on every cassette row.</p>
-      <% if (run && run.created_by) { %><p class="hint">Created by <%= run.created_by %>.</p><% } %>
+      <% if (run && run.created_by) { %><p class="hint">Created by <%= run.created_by === 'plan_replenishment_routes' ? 'the route planner' : run.created_by %>.</p><% } %>
       <p style="margin-top:14px"><button class="btn btn-primary" type="submit">Save run</button></p>
     </aside>
   </div>

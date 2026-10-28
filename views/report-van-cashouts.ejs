@@ -1,6 +1,6 @@
 <header class="page-head">
   <div>
-    <p class="eyebrow">v_van_cashout_incidents</p>
+    <p class="eyebrow">By van</p>
     <h1>Cash-outs on van routes</h1>
     <p class="lede">Each cash-out ticket is counted once, against the van that last serviced that ATM on or before the day the ticket opened. A later planned visit does not count. Vans with no such incidents still appear, at zero.</p>
   </div>
@@ -11,7 +11,7 @@
       <tr><th>Van</th><th>Location</th><th>Registration</th><th>Status</th><th class="num">ATMs on route</th><th class="num">Cash-outs</th><th>Share</th></tr>
     </thead>
     <tbody>
-      <% if (!rows.length) { %><tr><td colspan="7" class="empty">No cash vans are on the ledger.</td></tr><% } %>
+      <% if (!rows.length) { %><tr><td colspan="7" class="empty">No cash vans yet.</td></tr><% } %>
       <% rows.forEach((row) => { %>
         <tr>
           <td><%= row.van_code %></td>

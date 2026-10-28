@@ -1,6 +1,6 @@
 <header class="page-head">
   <div>
-    <p class="eyebrow">plan_replenishment_routes</p>
+    <p class="eyebrow">Routes</p>
     <h1>Replenishment runs</h1>
     <p class="lede">The planner selects ATMs whose forecast exceeds cash still in the machine, groups them by location, and assigns a van and custodian. Each run holds the cassette loads for that trip.</p>
   </div>
@@ -22,7 +22,7 @@
     </select>
   </label>
   <button class="btn btn-primary" type="submit">Plan routes</button>
-  <p class="hint" style="flex-basis:100%">Calls the PostgreSQL procedure. Running it again for the same date will not duplicate ATMs already on a run.</p>
+  <p class="hint" style="flex-basis:100%">Planning the same date again will not add an ATM that is already on a run.</p>
 </form>
 
 <% if (plans.length) { %>

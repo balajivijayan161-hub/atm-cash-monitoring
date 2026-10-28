@@ -135,7 +135,7 @@ async function importSwitchContent(client, {
   await client.query(
     `UPDATE switch_import_rows
      SET status = 'error',
-         error_message = 'Row was staged but not posted to the withdrawal ledger.'
+         error_message = 'This row was not saved.'
      WHERE batch_id = $1 AND status = 'staged'`,
     [batchId]
   );
