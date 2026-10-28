@@ -38,6 +38,18 @@ function ledgerAmountError(value, label) {
   return `${label} must be a number with up to 2 decimal places.`;
 }
 
+function formText(body, ...names) {
+  const source = body && typeof body === 'object' ? body : {};
+  for (const name of names) {
+    const value = source[name];
+    const items = Array.isArray(value) ? value : [value];
+    for (const item of items) {
+      if (typeof item === 'string' && item.length) return item;
+    }
+  }
+  return '';
+}
+
 function likePattern(value) {
   return `%${String(value).replace(/[\\%_]/g, '\\$&')}%`;
 }
@@ -227,6 +239,7 @@ function pageHref(base, query, page) {
 
 module.exports = {
   asArray,
+  formText,
   isIsoDate,
   intOrNull,
   parseLedgerAmount,

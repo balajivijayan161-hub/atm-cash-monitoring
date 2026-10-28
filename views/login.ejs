@@ -27,35 +27,16 @@
     <% if (error) { %>
       <p class="banner bad" role="alert" id="login-error"><%= error %></p>
     <% } %>
-    <form method="post" action="/login" id="login-form">
+    <form method="post" action="/login" id="login-form" enctype="application/x-www-form-urlencoded" autocomplete="on">
       <%- csrfField %>
       <label class="field" for="username">Username
         <input id="username" name="username" autocomplete="username" required value="<%= username %>" autofocus>
       </label>
       <label class="field" for="password">Password
-        <span class="password-row">
-          <input id="password" name="password" type="password" autocomplete="current-password" required>
-          <button class="btn" type="button" id="show-password" aria-controls="password" aria-pressed="false">Show</button>
-        </span>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
       </label>
-      <button class="btn btn-primary login-submit" type="submit" id="login-submit">Sign In</button>
+      <button class="btn btn-primary login-submit" type="submit">Sign In</button>
     </form>
   </main>
-  <script>
-    const password = document.getElementById('password');
-    const toggle = document.getElementById('show-password');
-    toggle.addEventListener('click', () => {
-      const show = password.type === 'password';
-      password.type = show ? 'text' : 'password';
-      toggle.textContent = show ? 'Hide' : 'Show';
-      toggle.setAttribute('aria-pressed', show ? 'true' : 'false');
-      password.focus();
-    });
-    document.getElementById('login-form').addEventListener('submit', () => {
-      const button = document.getElementById('login-submit');
-      button.disabled = true;
-      button.textContent = 'Signing In…';
-    });
-  </script>
 </body>
 </html>

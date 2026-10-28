@@ -26,13 +26,16 @@
             </form>
           </td>
           <td data-label="Set Password">
-            <form method="post" action="/users/<%= row.user_id %>/password">
+            <form method="post" action="/users/<%= row.user_id %>/password" enctype="application/x-www-form-urlencoded" autocomplete="on">
               <%- csrfField %>
+              <label class="field" for="username-<%= row.user_id %>">Username
+                <input id="username-<%= row.user_id %>" name="username" autocomplete="username" value="<%= row.username %>" readonly>
+              </label>
               <label class="field" for="new-password-<%= row.user_id %>">New password
-                <input id="new-password-<%= row.user_id %>" name="password" type="password" autocomplete="new-password" required>
+                <input id="new-password-<%= row.user_id %>" name="new-password" type="password" autocomplete="new-password" required>
               </label>
               <label class="field" for="confirm-password-<%= row.user_id %>">Confirm password
-                <input id="confirm-password-<%= row.user_id %>" name="password_confirm" type="password" autocomplete="new-password" required>
+                <input id="confirm-password-<%= row.user_id %>" name="confirm-password" type="password" autocomplete="new-password" required>
               </label>
               <button class="btn" type="submit">Set Password</button>
             </form>

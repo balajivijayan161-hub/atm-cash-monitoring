@@ -301,6 +301,7 @@ pre.script {
 .password-row { display: flex; gap: 8px; }
 .password-row input { flex: 1; }
 .login-submit { width: 100%; margin-top: 8px; }
+.login-card input, .login-card button { font-size: 16px; }
 
 @media print {
   .sidebar, .demo-banner, .filters, .actions, .colophon { display: none !important; }

@@ -1,10 +1,10 @@
 const express = require('express');
 const { query } = require('../db');
-const { checkPassword, hashPassword, passwordHints, secretMatch } = require('./password');
+const { checkPassword, hashPassword, secretMatch } = require('./password');
 const { lockoutSeconds, setupOpen, envSecret, recoveryEnabled, endUserSessions } = require('./accounts');
 const { writeSessionEvent, clientIp, recordUnsignedChange } = require('./activity');
 const { tooManyLoginAttempts, ABSOLUTE_MS } = require('./gate');
-const { renderPage } = require('../http');
+const { renderPage, formText } = require('../http');
 
 const router = express.Router();
 const LOCK_MS = 15 * 60 * 1000;
@@ -46,7 +46,7 @@ async function logSetup(req, outcome, userId) {
 router.get('/setup', async (req, res, next) => {
   try {
     if (!(await setupOpen())) return setupDisabled(res);
-    return res.render('setup', { error: '', hints: passwordHints('') });
+    return res.render('setup', { error: '' });
   } catch (err) {
     return next(err);
   }
@@ -59,21 +59,17 @@ router.post('/setup', async (req, res, next) => {
       `SELECT user_id FROM users WHERE username = 'superadmin'`
     );
     const userId = account.rows[0] ? account.rows[0].user_id : null;
-    const token = String(req.body.setup_token || '');
+    const token = formText(req.body, 'setup_token');
     if (!secretMatch(envSecret('SETUP_TOKEN'), token)) {
       await logSetup(req, 'rejected', userId);
-      return res.status(401).render('setup', {
-        error: 'The setup token does not match.',
-        hints: passwordHints(req.body.password || ''),
-      });
+      return res.status(401).render('setup', { error: 'The setup token does not match.' });
     }
-    const password = String(req.body.password || '');
-    const confirm = String(req.body.password_confirm || '');
+    const password = formText(req.body, 'new-password', 'password');
+    const confirm = formText(req.body, 'confirm-password', 'password_confirm');
     if (password.length < 12 || password !== confirm) {
       await logSetup(req, 'rejected', userId);
       return res.status(400).render('setup', {
         error: password.length < 12 ? 'Use at least 12 characters.' : 'The passwords do not match.',
-        hints: passwordHints(password),
       });
     }
     const saved = await query(
@@ -94,8 +90,8 @@ router.post('/setup', async (req, res, next) => {
 
 router.post('/login', async (req, res, next) => {
   try {
-    const username = String(req.body.username || '').trim().slice(0, 40);
-    const password = String(req.body.password || '');
+    const username = formText(req.body, 'username').trim().slice(0, 40);
+    const password = formText(req.body, 'password');
     const ip = clientIp(req);
     const userAgent = req.get('user-agent');
     if (tooManyLoginAttempts(ip)) {

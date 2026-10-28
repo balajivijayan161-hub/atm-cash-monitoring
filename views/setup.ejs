@@ -22,33 +22,23 @@
     <% if (error) { %>
       <p class="banner bad" role="alert"><%= error %></p>
     <% } %>
-    <form method="post" action="/setup" id="setup-form">
+    <form method="post" action="/setup" id="setup-form" enctype="application/x-www-form-urlencoded" autocomplete="on">
       <%- csrfField %>
+      <label class="field" for="username">Username
+        <input id="username" name="username" autocomplete="username" value="superadmin" readonly>
+      </label>
       <label class="field" for="setup_token">Setup token
         <input id="setup_token" name="setup_token" autocomplete="off" required>
       </label>
-      <label class="field" for="new-password">Password
-        <input id="new-password" name="password" type="password" autocomplete="new-password" minlength="12" required>
+      <label class="field" for="new-password">New password
+        <input id="new-password" name="new-password" type="password" autocomplete="new-password" required>
       </label>
       <label class="field" for="confirm-password">Confirm password
-        <input id="confirm-password" name="password_confirm" type="password" autocomplete="new-password" minlength="12" required>
+        <input id="confirm-password" name="confirm-password" type="password" autocomplete="new-password" required>
       </label>
-      <p class="hint" id="strength-hint"><%= hints.length ? hints.join(' ') : 'Strong enough to save.' %></p>
+      <p class="hint">Use at least 12 characters, with upper and lower case letters, a number, and a symbol.</p>
       <button class="btn btn-primary login-submit" type="submit">Save Password</button>
     </form>
   </main>
-  <script>
-    const password = document.getElementById('new-password');
-    const hint = document.getElementById('strength-hint');
-    password.addEventListener('input', () => {
-      const value = password.value;
-      const notes = [];
-      if (value.length < 12) notes.push('Use at least 12 characters.');
-      if (!/[a-z]/.test(value) || !/[A-Z]/.test(value)) notes.push('Mix upper and lower case letters.');
-      if (!/\d/.test(value)) notes.push('Add a number.');
-      if (!/[^A-Za-z0-9]/.test(value)) notes.push('Add a symbol.');
-      hint.textContent = notes.length ? notes.join(' ') : 'Strong enough to save.';
-    });
-  </script>
 </body>
 </html>

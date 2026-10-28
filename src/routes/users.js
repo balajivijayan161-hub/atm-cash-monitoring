@@ -1,6 +1,6 @@
 const express = require('express');
 const { query } = require('../db');
-const { asyncRoute, renderPage, intOrNull } = require('../http');
+const { asyncRoute, renderPage, intOrNull, formText } = require('../http');
 const { requireCan } = require('../auth/gate');
 const { hashPassword } = require('../auth/password');
 const { endUserSessions } = require('../auth/accounts');
@@ -21,8 +21,8 @@ function cleanUser(body) {
     custodian_id: body.custodian_id ? Number(body.custodian_id) : null,
     engineer_id: body.engineer_id ? Number(body.engineer_id) : null,
     active: body.active === 'on' || body.active === 'true',
-    password: String(body.password || ''),
-    password_confirm: String(body.password_confirm || ''),
+    password: formText(body, 'new-password', 'password'),
+    password_confirm: formText(body, 'confirm-password', 'password_confirm'),
   };
 }
 

@@ -5,7 +5,7 @@
   </div>
 </header>
 <% if (errors.length) { %><div class="errors" role="alert"><ul><% errors.forEach((item) => { %><li><%= item %></li><% }) %></ul></div><% } %>
-<form method="post" action="<%= editing ? '/users/' + editing.user_id : '/users' %>">
+<form method="post" action="<%= editing ? '/users/' + editing.user_id : '/users' %>" enctype="application/x-www-form-urlencoded" autocomplete="on">
   <%- csrfField %>
   <div class="form-grid">
     <% if (!editing) { %>
@@ -36,10 +36,10 @@
       <input name="engineer_id" value="<%= form.engineer_id || '' %>">
     </label>
     <label class="field" for="new-password"><%= editing ? 'New password' : 'Password' %>
-      <input id="new-password" name="password" type="password" autocomplete="new-password" <%= editing ? '' : 'required' %>>
+      <input id="new-password" name="new-password" type="password" autocomplete="new-password" <%= editing ? '' : 'required' %>>
     </label>
     <label class="field" for="confirm-password">Confirm password
-      <input id="confirm-password" name="password_confirm" type="password" autocomplete="new-password" <%= editing ? '' : 'required' %>>
+      <input id="confirm-password" name="confirm-password" type="password" autocomplete="new-password" <%= editing ? '' : 'required' %>>
     </label>
     <label class="check"><input type="checkbox" name="active" <%= form.active ? 'checked' : '' %>> Active</label>
   </div>
