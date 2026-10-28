@@ -22,7 +22,7 @@ router.get('/reports/downtime-atms', asyncRoute(async (req, res) => {
     query(`SELECT date_trunc('month', CURRENT_TIMESTAMP) AS month_start, CURRENT_TIMESTAMP AS period_end`),
   ]);
   renderPage(req, res, 'report-downtime-atms', {
-    title: 'Downtime above 5%',
+    title: 'Downtime Above 5%',
     rows: rows.rows,
     monthStart: bounds.rows[0].month_start,
     periodEnd: bounds.rows[0].period_end,
@@ -34,7 +34,7 @@ router.get('/reports/van-cashouts', asyncRoute(async (req, res) => {
     `SELECT * FROM v_van_cashout_incidents ORDER BY cashout_incidents DESC, van_code`
   );
   const max = rows.rows.reduce((top, row) => Math.max(top, Number(row.cashout_incidents) || 0), 0);
-  renderPage(req, res, 'report-van-cashouts', { title: 'Van cash-out incidents', rows: rows.rows, max });
+  renderPage(req, res, 'report-van-cashouts', { title: 'Van Cash-Outs', rows: rows.rows, max });
 }));
 
 router.get('/reports/withdrawal-matrix', asyncRoute(async (req, res) => {
@@ -70,7 +70,7 @@ router.get('/reports/withdrawal-matrix', asyncRoute(async (req, res) => {
     }
   }
   renderPage(req, res, 'report-matrix', {
-    title: 'Withdrawals by ATM and weekday',
+    title: 'Withdrawal Matrix',
     locations: locations.rows,
     locationId,
     rows,
@@ -109,7 +109,7 @@ router.get('/reports/downtime-by-location', asyncRoute(async (req, res) => {
   ]);
   const maxDowntime = summary.rows.reduce((top, row) => Math.max(top, Number(row.avg_downtime_pct) || 0), 0);
   renderPage(req, res, 'report-downtime-location', {
-    title: 'Downtime by location',
+    title: 'Downtime by Location',
     summary: summary.rows,
     reasons: reasons.rows,
     maxDowntime,

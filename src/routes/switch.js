@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const { query, withTransaction } = require('../db');
-const { asyncRoute, renderPage, intOrNull } = require('../http');
+const { asyncRoute, renderPage, intOrNull, batchName } = require('../http');
 const { importSwitchContent } = require('../services/switchImport');
 
 const router = express.Router();
@@ -12,7 +12,7 @@ const upload = multer({
 
 async function recentBatches() {
   const rows = await query(
-    `SELECT batch_id, filename, file_format, uploaded_at, row_count, loaded_count, error_count, status
+    `SELECT batch_id, filename, source, file_format, uploaded_at, row_count, loaded_count, error_count, status
      FROM switch_import_batches
      ORDER BY batch_id DESC
      LIMIT 12`
@@ -22,7 +22,7 @@ async function recentBatches() {
 
 router.get('/switch', asyncRoute(async (req, res) => {
   renderPage(req, res, 'switch', {
-    title: 'Switch file interface',
+    title: 'Bank Data Import',
     batches: await recentBatches(),
     errors: [],
     pasted: '',
@@ -39,7 +39,7 @@ router.post('/switch', (req, res, next) => {
 }, asyncRoute(async (req, res) => {
   if (req.fileError) {
     return renderPage(req, res, 'switch', {
-      title: 'Switch file interface',
+      title: 'Bank Data Import',
       batches: await recentBatches(),
       errors: [req.fileError],
       pasted: '',
@@ -52,7 +52,7 @@ router.post('/switch', (req, res, next) => {
   const filename = req.file && fileText.trim() ? req.file.originalname : 'pasted.txt';
   if (!content.trim()) {
     return renderPage(req, res, 'switch', {
-      title: 'Switch file interface',
+      title: 'Bank Data Import',
       batches: await recentBatches(),
       errors: ['Choose a file or paste switch rows first.'],
       pasted,
@@ -67,7 +67,7 @@ router.post('/switch', (req, res, next) => {
     }));
     if (!result.ok) {
       return renderPage(req, res, 'switch', {
-        title: 'Switch file interface',
+        title: 'Bank Data Import',
         batches: await recentBatches(),
         errors: [result.fileError],
         pasted,
@@ -75,15 +75,15 @@ router.post('/switch', (req, res, next) => {
       });
     }
     const notice = result.loaded
-      ? `Staged ${result.rowCount} rows. Loaded ${result.loaded} into daily withdrawals. ${result.errors} rejected.`
-      : `Staged ${result.rowCount} rows. Nothing was loaded. ${result.errors} rejected.`;
+      ? `Accepted ${result.loaded} of ${result.rowCount} rows. ${result.errors} rejected.`
+      : `Nothing was accepted. ${result.errors} of ${result.rowCount} rows were rejected.`;
     return res.redirect(`/switch/${result.batchId}?notice=${encodeURIComponent(notice)}`);
   } catch (err) {
     console.error(err);
     return renderPage(req, res, 'switch', {
-      title: 'Switch file interface',
+      title: 'Bank Data Import',
       batches: await recentBatches(),
-      errors: ['The interface could not post this file. Check the format and try again.'],
+      errors: ['That import could not be saved. Check the rows and try again.'],
       pasted,
       statusCode: 400,
     });
@@ -92,7 +92,7 @@ router.post('/switch', (req, res, next) => {
 
 router.get('/switch/:id', asyncRoute(async (req, res) => {
   const id = intOrNull(req.params.id);
-  if (!id) return renderPage(req, res, 'not-found', { title: 'Batch not found', statusCode: 404 });
+  if (!id) return renderPage(req, res, 'not-found', { title: 'Import Not Found', statusCode: 404 });
   const [batch, rows] = await Promise.all([
     query('SELECT * FROM switch_import_batches WHERE batch_id = $1', [id]),
     query(
@@ -103,9 +103,9 @@ router.get('/switch/:id', asyncRoute(async (req, res) => {
       [id]
     ),
   ]);
-  if (!batch.rowCount) return renderPage(req, res, 'not-found', { title: 'Batch not found', statusCode: 404 });
+  if (!batch.rowCount) return renderPage(req, res, 'not-found', { title: 'Import Not Found', statusCode: 404 });
   renderPage(req, res, 'switch-batch', {
-    title: `Switch batch ${id}`,
+    title: batchName(batch.rows[0]),
     batch: batch.rows[0],
     rows: rows.rows,
   });

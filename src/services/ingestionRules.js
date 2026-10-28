@@ -1,3 +1,5 @@
+const { titleCase } = require('../http');
+
 const TICKET_FAULTS = {
   cash_out: { category: 'cash_out', priority: 'high', downtime: 'cash_out' },
   hardware: { category: 'hardware', priority: 'medium', downtime: 'hardware' },
@@ -122,8 +124,8 @@ async function applyFault(client, row) {
      VALUES ($1, $2, $3, $4, $5, 'open', 'monitor', $6)`,
     [
       row.atmId,
-      `${row.faultCode.replace(/_/g, ' ')} at ${row.atmCode}`,
-      `Raised from switch batch ${row.batchId || ''}`.trim(),
+      `${titleCase(row.faultCode)} at ${row.atmCode}`,
+      'Raised from bank data.',
       spec.category,
       spec.priority,
       row.faultCode,
@@ -199,14 +201,14 @@ async function applyLink(client, row, settings) {
       `UPDATE downtime_log
        SET notes = $2
        WHERE downtime_id = $1`,
-      [open.rows[0].downtime_id, `Still offline. Switch batch ${row.batchId || ''}.`.trim()]
+      [open.rows[0].downtime_id, 'Still offline.']
     );
     return;
   }
   await client.query(
     `INSERT INTO downtime_log (atm_id, started_at, reason, notes, origin)
      VALUES ($1, $2, $3, $4, $5)`,
-    [row.atmId, offlineSince, reason, `Offline from switch batch ${row.batchId || ''}.`.trim(), origin]
+    [row.atmId, offlineSince, reason, 'Opened while the ATM was offline.', origin]
   );
 }
 

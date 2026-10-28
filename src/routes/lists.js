@@ -21,7 +21,7 @@ router.get('/alerts', asyncRoute(async (req, res) => {
     [PAGE_SIZE, window.offset]
   );
   renderPage(req, res, 'alerts', {
-    title: 'Cash alerts',
+    title: 'Cash Alerts',
     rows: rows.rows,
     page: window.page,
     pages: window.pages,
@@ -43,7 +43,7 @@ router.get('/downtime', asyncRoute(async (req, res) => {
     [PAGE_SIZE, window.offset]
   );
   renderPage(req, res, 'downtime-open', {
-    title: 'Open downtime',
+    title: 'Open Downtime',
     rows: rows.rows,
     page: window.page,
     pages: window.pages,

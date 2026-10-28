@@ -85,7 +85,7 @@ router.get('/', asyncRoute(async (req, res) => {
   const byDow = new Map(byWeekday.rows.map((row) => [row.dow, Number(row.amount)]));
 
   renderPage(req, res, 'dashboard', {
-    title: 'Fleet uptime',
+    title: 'Fleet Uptime',
     fleet: fleetRow,
     uptime,
     tickets: tickets.rows[0],

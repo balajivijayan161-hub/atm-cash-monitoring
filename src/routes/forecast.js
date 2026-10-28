@@ -54,7 +54,7 @@ router.get('/forecast', asyncRoute(async (req, res) => {
     atms: ref.atms.filter((atm) => atm.location_id === location.location_id),
   }));
   renderPage(req, res, 'forecast', {
-    title: 'Cash forecast',
+    title: 'Cash Forecast',
     groups,
     targetDate,
     atmId: atmId || '',

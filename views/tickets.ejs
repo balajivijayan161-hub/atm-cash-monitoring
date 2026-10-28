@@ -1,7 +1,7 @@
 <header class="page-head">
   <div>
     <p class="eyebrow">Service desk</p>
-    <h1>Fault tickets</h1>
+    <h1>Fault Tickets</h1>
     <p class="lede">Variance tickets open when the counted cash does not match the expected total. Assign an engineer or close the ticket once the site is back.</p>
   </div>
 </header>
@@ -10,7 +10,7 @@
     <select name="status">
       <option value="">Any</option>
       <% statuses.forEach((status) => { %>
-        <option value="<%= status %>" <%= filters.status === status ? 'selected' : '' %>><%= status %></option>
+        <option value="<%= status %>" <%= filters.status === status ? 'selected' : '' %>><%= label(status) %></option>
       <% }) %>
     </select>
   </label>
@@ -36,12 +36,12 @@
           <td data-label="Ticket">
             <%= row.ticket_no %><br>
             <span class="hint"><%= row.title %></span><br>
-            <span class="pill <%= row.source %>"><%= row.source %></span>
+            <span class="pill <%= row.source %>"><%= sourceLabel(row.source) %></span>
           </td>
           <td data-label="ATM"><a href="/atms/<%= row.atm_id %>"><%= row.atm_code %></a><br><span class="hint"><%= row.location_name %></span></td>
           <td data-label="Category"><%= label(row.category) %></td>
-          <td data-label="Priority"><span class="pill <%= row.priority %>"><%= row.priority %></span></td>
-          <td data-label="Status"><span class="pill <%= row.status %>"><%= row.status %></span></td>
+          <td data-label="Priority"><span class="pill <%= row.priority %>"><%= label(row.priority) %></span></td>
+          <td data-label="Status"><span class="pill <%= row.status %>"><%= label(row.status) %></span></td>
           <td data-label="Engineer"><%= row.engineer_name || '—' %></td>
           <td data-label="Assign">
             <% if (row.status !== 'closed') { %>

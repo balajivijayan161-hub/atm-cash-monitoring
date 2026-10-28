@@ -59,7 +59,7 @@ router.get('/atms', asyncRoute(async (req, res) => {
 
 router.get('/atms/:id', asyncRoute(async (req, res) => {
   const id = intOrNull(req.params.id);
-  if (!id) return renderPage(req, res, 'not-found', { title: 'ATM not found', statusCode: 404 });
+  if (!id) return renderPage(req, res, 'not-found', { title: 'ATM Not Found', statusCode: 404 });
   const atm = await query(
     `SELECT a.*, b.branch_name, b.branch_code, b.address AS branch_address, b.ifsc_code,
             l.location_name, l.city, l.state, l.region, d.downtime_pct, d.downtime_minutes, d.elapsed_minutes
@@ -70,7 +70,7 @@ router.get('/atms/:id', asyncRoute(async (req, res) => {
      WHERE a.atm_id = $1`,
     [id]
   );
-  if (!atm.rowCount) return renderPage(req, res, 'not-found', { title: 'ATM not found', statusCode: 404 });
+  if (!atm.rowCount) return renderPage(req, res, 'not-found', { title: 'ATM Not Found', statusCode: 404 });
   const [forecast, withdrawals, tickets, downtime, loads] = await Promise.all([
     query(
       `SELECT day::date::text AS day, forecast_cash($1, day::date) AS forecast

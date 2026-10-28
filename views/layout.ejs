@@ -16,31 +16,33 @@
       <div class="brand">
         <div class="mark" aria-hidden="true">₹</div>
         <div>
-          <strong>ATM Cash Ops</strong>
-          <span>Cash operations</span>
+          <strong>ATM Cash Operations</strong>
+          <span>Cash Operations</span>
         </div>
       </div>
       <p class="nav-label">Monitor</p>
       <nav class="nav" aria-label="Primary">
-        <a class="<%= navClass('/') %>" href="/"<% if (navClass('/')) { %> aria-current="page"<% } %>>Uptime dashboard</a>
+        <a class="<%= navClass('/') %>" href="/"<% if (navClass('/')) { %> aria-current="page"<% } %>>Uptime Dashboard</a>
         <a class="<%= navClass('/atms') %>" href="/atms"<% if (navClass('/atms')) { %> aria-current="page"<% } %>>ATMs</a>
-        <a class="<%= navClass('/tickets') %>" href="/tickets"<% if (navClass('/tickets')) { %> aria-current="page"<% } %>>Fault tickets</a>
+        <a class="<%= navClass('/tickets') %>" href="/tickets"<% if (navClass('/tickets')) { %> aria-current="page"<% } %>>Fault Tickets</a>
+        <a class="<%= navClass('/alerts') %>" href="/alerts"<% if (navClass('/alerts')) { %> aria-current="page"<% } %>>Cash Alerts</a>
+        <a class="<%= navClass('/downtime') %>" href="/downtime"<% if (navClass('/downtime')) { %> aria-current="page"<% } %>>Open Downtime</a>
       </nav>
       <p class="nav-label">Cash</p>
       <nav class="nav" aria-label="Cash">
-        <a class="<%= navClass('/forecast') %>" href="/forecast"<% if (navClass('/forecast')) { %> aria-current="page"<% } %>>Cash forecast</a>
-        <a class="<%= navClass('/runs') %>" href="/runs"<% if (navClass('/runs')) { %> aria-current="page"<% } %>>Replenishment</a>
+        <a class="<%= navClass('/forecast') %>" href="/forecast"<% if (navClass('/forecast')) { %> aria-current="page"<% } %>>Cash Forecast</a>
+        <a class="<%= navClass('/runs') %>" href="/runs"<% if (navClass('/runs')) { %> aria-current="page"<% } %>>Replenishment Runs</a>
         <a class="<%= navClass('/reconciliations') %>" href="/reconciliations"<% if (navClass('/reconciliations')) { %> aria-current="page"<% } %>>Reconciliation</a>
-        <a class="<%= navClass('/switch') %>" href="/switch"<% if (navClass('/switch')) { %> aria-current="page"<% } %>>Switch file</a>
-        <a class="<%= navClass('/imports') %>" href="/imports"<% if (navClass('/imports')) { %> aria-current="page"<% } %>>Imports</a>
+        <a class="<%= navClass('/switch') %>" href="/switch"<% if (navClass('/switch')) { %> aria-current="page"<% } %>>Bank Data Import</a>
+        <a class="<%= navClass('/imports') %>" href="/imports"<% if (navClass('/imports')) { %> aria-current="page"<% } %>>Import History</a>
       </nav>
       <p class="nav-label">Reports</p>
       <nav class="nav" aria-label="Reports">
-        <a class="<%= navClass('/reports/downtime-atms') %>" href="/reports/downtime-atms"<% if (navClass('/reports/downtime-atms')) { %> aria-current="page"<% } %>>Downtime above 5%</a>
-        <a class="<%= navClass('/reports/van-cashouts') %>" href="/reports/van-cashouts"<% if (navClass('/reports/van-cashouts')) { %> aria-current="page"<% } %>>Van cash-outs</a>
-        <a class="<%= navClass('/reports/withdrawal-matrix') %>" href="/reports/withdrawal-matrix"<% if (navClass('/reports/withdrawal-matrix')) { %> aria-current="page"<% } %>>Withdrawal matrix</a>
-        <a class="<%= navClass('/reports/downtime-by-location') %>" href="/reports/downtime-by-location"<% if (navClass('/reports/downtime-by-location')) { %> aria-current="page"<% } %>>Downtime by location</a>
-        <a class="<%= navClass('/operations/ej-archive') %>" href="/operations/ej-archive"<% if (navClass('/operations/ej-archive')) { %> aria-current="page"<% } %>>EJ log archive</a>
+        <a class="<%= navClass('/reports/downtime-atms') %>" href="/reports/downtime-atms"<% if (navClass('/reports/downtime-atms')) { %> aria-current="page"<% } %>>Downtime Above 5%</a>
+        <a class="<%= navClass('/reports/van-cashouts') %>" href="/reports/van-cashouts"<% if (navClass('/reports/van-cashouts')) { %> aria-current="page"<% } %>>Van Cash-Outs</a>
+        <a class="<%= navClass('/reports/withdrawal-matrix') %>" href="/reports/withdrawal-matrix"<% if (navClass('/reports/withdrawal-matrix')) { %> aria-current="page"<% } %>>Withdrawal Matrix</a>
+        <a class="<%= navClass('/reports/downtime-by-location') %>" href="/reports/downtime-by-location"<% if (navClass('/reports/downtime-by-location')) { %> aria-current="page"<% } %>>Downtime by Location</a>
+        <a class="<%= navClass('/operations/ej-archive') %>" href="/operations/ej-archive"<% if (navClass('/operations/ej-archive')) { %> aria-current="page"<% } %>>Electronic Journal Archive</a>
       </nav>
     </aside>
     <div class="content">

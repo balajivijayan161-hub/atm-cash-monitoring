@@ -41,7 +41,7 @@ router.get('/tickets', asyncRoute(async (req, res) => {
     query(`SELECT engineer_id, full_name, specialty FROM engineers WHERE active ORDER BY full_name`),
   ]);
   renderPage(req, res, 'tickets', {
-    title: 'Fault tickets',
+    title: 'Fault Tickets',
     rows: rows.rows,
     engineers: engineers.rows,
     filters: { status, category, ticket: focusId || '' },

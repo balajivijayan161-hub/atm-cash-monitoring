@@ -1,33 +1,28 @@
 <header class="page-head">
   <div>
-    <p class="eyebrow"><%= batch.file_format %> · <%= label(batch.status) %></p>
-    <h1><%= batch.filename %></h1>
-    <p class="lede"><%= batch.loaded_count %> loaded, <%= batch.error_count %> rejected, of <%= batch.row_count %> rows. Uploaded <%= prettyDateTime(batch.uploaded_at) %>.</p>
+    <p class="eyebrow"><%= sourceLabel(batch.source) %></p>
+    <h1><%= batchName(batch) %></h1>
+    <p class="lede"><%= batch.loaded_count %> accepted, <%= batch.error_count %> rejected, of <%= batch.row_count %> rows. Received <%= prettyDateTime(batch.uploaded_at) %> IST.</p>
   </div>
-  <a class="btn" href="/switch">Load another file</a>
+  <a class="btn" href="/switch">Import Another Batch</a>
 </header>
 <div class="table-wrap">
-  <table>
+  <table class="stack-rows">
     <thead>
-      <tr><th>Line</th><th>ATM</th><th>Date</th><th class="num">Amount</th><th class="num">Txns</th><th>Status</th><th>Error</th></tr>
+      <tr><th>Line</th><th>ATM</th><th>Date</th><th class="num">Amount</th><th class="num">Transactions</th><th>Status</th><th>Rejection Reason</th></tr>
     </thead>
     <tbody>
       <% rows.forEach((row) => { %>
         <tr class="<%= row.status === 'error' ? 'row-error' : '' %>">
-          <td><%= row.line_no %></td>
-          <td><%= row.atm_code || '—' %></td>
-          <td><%= row.txn_date ? prettyDate(row.txn_date) : '—' %></td>
-          <td class="num"><%= row.amount == null ? '—' : inr(row.amount) %></td>
-          <td class="num"><%= row.txn_count == null ? '—' : row.txn_count %></td>
-          <td><span class="pill <%= row.status %>"><%= row.status %></span></td>
-          <td><%= row.error_message || '' %></td>
+          <td data-label="Line"><%= row.line_no %></td>
+          <td data-label="ATM"><%= row.atm_code || '—' %></td>
+          <td data-label="Date"><%= row.txn_date ? prettyDate(row.txn_date) : '—' %></td>
+          <td class="num" data-label="Amount"><%= row.amount == null ? '—' : inr(row.amount) %></td>
+          <td class="num" data-label="Transactions"><%= row.txn_count == null ? '—' : row.txn_count %></td>
+          <td data-label="Status"><span class="pill <%= row.status %>"><%= label(row.status) %></span></td>
+          <td data-label="Rejection Reason"><%= row.error_message || '—' %></td>
         </tr>
       <% }) %>
     </tbody>
   </table>
 </div>
-<details style="margin-top:14px">
-  <summary>Raw lines</summary>
-  <pre class="script"><% rows.forEach((row) => { %><%= row.raw_line %>
-<% }) %></pre>
-</details>

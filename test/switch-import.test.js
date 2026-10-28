@@ -36,7 +36,7 @@ test('fixed-width rows are 42 characters and reject a short line', () => {
   assert.equal(parsed.rows[0].error, null);
   assert.equal(parsed.rows[0].amount, 220000);
   assert.equal(parsed.rows[0].txnCount, 61);
-  assert.match(parsed.rows[1].error, /42 characters/);
+  assert.match(parsed.rows[1].error, /not the expected length/);
 });
 
 test('a switch file is staged, loaded, and keeps error rows', async () => {

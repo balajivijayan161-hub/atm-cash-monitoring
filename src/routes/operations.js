@@ -5,7 +5,7 @@ const router = express.Router();
 
 router.get('/operations/ej-archive', asyncRoute(async (req, res) => {
   renderPage(req, res, 'ej-archive', {
-    title: 'EJ log archive',
+    title: 'Electronic Journal Archive',
   });
 }));
 

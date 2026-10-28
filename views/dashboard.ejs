@@ -1,17 +1,17 @@
 <header class="page-head">
   <div>
     <p class="eyebrow">Month to date</p>
-    <h1>Fleet uptime</h1>
+    <h1>Fleet Uptime</h1>
     <p class="lede">Availability, cash-out pressure, and how weekend withdrawals sit against the cash still in the machines.</p>
   </div>
   <form method="post" action="<%= simulator.running ? '/live-feed/stop' : '/live-feed/start' %>">
-    <button class="btn <%= simulator.running ? 'btn-danger' : 'btn-primary' %>" type="submit"><%= simulator.running ? 'Stop live feed' : 'Live feed' %></button>
-    <% if (simulator.running) { %><p class="hint">Feed is on and will stop itself after 15 minutes.</p><% } %>
+    <button class="btn <%= simulator.running ? 'btn-danger' : 'btn-primary' %>" type="submit"><%= simulator.running ? 'Stop Live Feed' : 'Live Feed' %></button>
+    <% if (simulator.running) { %><p class="hint">The live feed is on and stops itself after 15 minutes.</p><% } %>
   </form>
 </header>
 
 <section class="section">
-  <h2>Cash alerts</h2>
+  <h2>Cash Alerts</h2>
   <div class="table-wrap">
     <table>
       <thead><tr><th>ATM</th><th class="num">Cash</th><th class="num">Capacity</th><th>Opened</th></tr></thead>
@@ -40,32 +40,32 @@
 
 <section class="kpi-grid" aria-label="Fleet indicators">
   <article class="kpi">
-    <span>Fleet uptime</span>
+    <span>Fleet Uptime</span>
     <strong><%= uptime == null ? '—' : pct(uptime) %></strong>
     <em><%= fleet.atms || 0 %> ATMs in the elapsed month</em>
   </article>
   <article class="kpi">
-    <span>Above 5% downtime</span>
+    <span>Above 5% Downtime</span>
     <strong><%= fleet.above_five || 0 %></strong>
     <em><a href="/reports/downtime-atms">Open the exception list</a></em>
   </article>
   <article class="kpi">
-    <span>Open fault tickets</span>
+    <span>Open Fault Tickets</span>
     <strong><%= tickets.open_tickets || 0 %></strong>
     <em><%= tickets.open_variances || 0 %> from cash variances</em>
   </article>
   <article class="kpi">
-    <span>Cash-out or down</span>
+    <span>Cash-Out or Down</span>
     <strong><%= (fleet.cash_out || 0) + (fleet.out_of_service || 0) %></strong>
     <em><%= fleet.cash_out || 0 %> empty · <%= fleet.out_of_service || 0 %> out of service</em>
   </article>
   <article class="kpi">
-    <span>Dispensed yesterday</span>
+    <span>Dispensed Yesterday</span>
     <strong><%= inr(dispensed.amount) %></strong>
-    <em><%= dispensed.txns || 0 %> switch transactions</em>
+    <em><%= dispensed.txns || 0 %> bank transactions</em>
   </article>
   <article class="kpi">
-    <span>Runs today</span>
+    <span>Runs Today</span>
     <strong><%= runs.today_runs || 0 %></strong>
     <em><%= runs.tomorrow_planned || 0 %> already planned for tomorrow</em>
   </article>
@@ -73,24 +73,24 @@
 
 <section class="chart-grid">
   <article class="card">
-    <h3>Uptime by location</h3>
+    <h3>Uptime by Location</h3>
     <div class="chart-box"><canvas id="uptime-chart"></canvas></div>
   </article>
   <article class="card">
-    <h3>Downtime minutes, last 14 days</h3>
+    <h3>Downtime Minutes, Last 14 Days</h3>
     <div class="chart-box"><canvas id="day-chart"></canvas></div>
   </article>
 </section>
 
 <section class="section card">
-  <h3>Withdrawals by weekday, last 8 weeks</h3>
+  <h3>Withdrawals by Weekday, Last 8 Weeks</h3>
   <p class="hint">Friday and Saturday should stand above the midweek columns. That spike is what empties cassettes before Monday.</p>
   <div class="chart-box compact"><canvas id="weekday-chart"></canvas></div>
 </section>
 
 <section class="section two-col">
   <div>
-    <h2>Lowest availability</h2>
+    <h2>Lowest Availability</h2>
     <div class="table-wrap">
       <table>
         <thead>
@@ -113,7 +113,7 @@
     </div>
   </div>
   <div>
-    <h2>Latest tickets</h2>
+    <h2>Latest Tickets</h2>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Ticket</th><th>ATM</th><th>Status</th></tr></thead>
@@ -125,7 +125,7 @@
             <tr>
               <td><a href="/tickets?ticket=<%= row.ticket_id %>#ticket-<%= row.ticket_id %>"><%= row.ticket_no %></a><br><span class="hint"><%= row.title %></span></td>
               <td><%= row.atm_code %></td>
-              <td><span class="pill <%= row.status %>"><%= row.status %></span></td>
+              <td><span class="pill <%= row.status %>"><%= label(row.status) %></span></td>
             </tr>
           <% }) %>
         </tbody>
@@ -135,17 +135,17 @@
 </section>
 
 <section class="section">
-  <h2>Where the work is</h2>
+  <h2>Where the Work Is</h2>
   <div class="link-grid">
-    <a href="/forecast"><strong>Cash forecast</strong><span>Expected cash need for one ATM, from the same weekday over the last four weeks.</span></a>
-    <a href="/runs"><strong>Plan replenishment</strong><span>Groups ATMs whose forecast exceeds remaining cash onto vans and custodians.</span></a>
-    <a href="/runs/new"><strong>Cassette loads</strong><span>A run with one row per cassette. Total loaded updates as note counts change.</span></a>
+    <a href="/forecast"><strong>Cash Forecast</strong><span>Expected cash need for one ATM, from the same weekday over the last four weeks.</span></a>
+    <a href="/runs"><strong>Replenishment Runs</strong><span>Groups ATMs whose forecast exceeds remaining cash onto vans and custodians.</span></a>
+    <a href="/runs/new"><strong>Cassette Loads</strong><span>A run with one row per cassette. Total loaded updates as note counts change.</span></a>
     <a href="/reconciliations/new"><strong>Reconciliation</strong><span>When the counted cash does not match the expected total, a fault ticket is opened.</span></a>
-    <a href="/reports/downtime-atms"><strong>Downtime above 5%</strong><span>ATMs whose month-to-date outage exceeds 5% of elapsed minutes.</span></a>
-    <a href="/reports/van-cashouts"><strong>Van cash-outs</strong><span>Each cash-out ticket counted once, against the van that last serviced the ATM on or before that day.</span></a>
-    <a href="/reports/withdrawal-matrix"><strong>ATM × weekday</strong><span>Withdrawal totals for the last eight weeks, one location at a time.</span></a>
-    <a href="/reports/downtime-by-location"><strong>Downtime by location</strong><span>Outage minutes and uptime rolled up to each city.</span></a>
-    <a href="/switch"><strong>Switch file load</strong><span>Check a CSV or fixed-width file and save the valid withdrawal totals.</span></a>
+    <a href="/reports/downtime-atms"><strong>Downtime Above 5%</strong><span>ATMs whose month-to-date outage exceeds 5% of elapsed minutes.</span></a>
+    <a href="/reports/van-cashouts"><strong>Van Cash-Outs</strong><span>Each cash-out ticket counted once, against the van that last serviced the ATM on or before that day.</span></a>
+    <a href="/reports/withdrawal-matrix"><strong>Withdrawal Matrix</strong><span>Withdrawal totals for the last eight weeks, one location at a time.</span></a>
+    <a href="/reports/downtime-by-location"><strong>Downtime by Location</strong><span>Outage minutes and uptime rolled up to each city.</span></a>
+    <a href="/switch"><strong>Bank Data Import</strong><span>Load a daily bank file and save the valid withdrawal totals.</span></a>
   </div>
 </section>
 

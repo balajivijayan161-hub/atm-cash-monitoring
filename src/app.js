@@ -10,6 +10,10 @@ const {
   prettyDate,
   prettyDateTime,
   pageHref,
+  titleCase,
+  sourceLabel,
+  batchName,
+  formatLabel,
 } = require('./http');
 
 function createApp() {
@@ -24,8 +28,10 @@ function createApp() {
   app.locals.prettyDate = prettyDate;
   app.locals.prettyDateTime = prettyDateTime;
   app.locals.pageHref = pageHref;
-  app.locals.label = (value) => String(value || '').replace(/_/g, ' ');
-  app.locals.sourceLabel = (value) => (value === 'simulator' ? 'Live feed' : app.locals.label(value || 'manual'));
+  app.locals.label = titleCase;
+  app.locals.sourceLabel = sourceLabel;
+  app.locals.batchName = batchName;
+  app.locals.formatLabel = formatLabel;
   app.locals.jsonScript = (value) => JSON.stringify(value)
     .replace(/</g, '\\u003c')
     .replace(/\u2028/g, '\\u2028')
@@ -82,7 +88,7 @@ function createApp() {
   app.use(require('./routes/operations'));
 
   app.use((req, res) => {
-    renderPage(req, res, 'not-found', { title: 'Not found', statusCode: 404 });
+    renderPage(req, res, 'not-found', { title: 'Page Not Found', statusCode: 404 });
   });
 
   app.use((err, req, res, next) => {

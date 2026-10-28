@@ -1,8 +1,8 @@
 <header class="page-head">
   <div>
-    <p class="eyebrow">Daily file</p>
-    <h1>Switch file</h1>
-    <p class="lede">Upload a daily switch file. Valid rows are saved as that day’s withdrawal totals. Rejected rows stay on the batch with the reason.</p>
+    <p class="eyebrow">Daily Totals</p>
+    <h1>Bank Data Import</h1>
+    <p class="lede">Upload a daily bank file. Valid rows are saved as that day’s withdrawal totals. Rejected rows stay on the batch with the reason.</p>
   </div>
 </header>
 <% if (errors.length) { %>
@@ -10,46 +10,41 @@
 <% } %>
 <section class="two-col">
   <form class="card" method="post" action="/switch" enctype="multipart/form-data">
-    <h3>Load a file</h3>
+    <h3>Load a Batch</h3>
     <label class="field">File
       <input type="file" name="file" accept=".csv,.txt,.dat,text/csv,text/plain">
     </label>
     <label class="field" style="margin-top:10px">Or paste rows
-      <textarea name="pasted" placeholder="atm_code,txn_date,amount,txn_count"><%= pasted %></textarea>
+      <textarea name="pasted" placeholder="ATM code, date, amount, transaction count"><%= pasted %></textarea>
     </label>
     <label class="check" style="margin:10px 0">
       <input type="checkbox" name="replace" value="on">
       Replace an existing total for the same ATM and date
     </label>
-    <button class="btn btn-primary" type="submit">Validate and load</button>
-    <p class="hint" style="margin-top:10px">
-      Format files: <a href="/samples/switch_transactions.csv">CSV</a> · <a href="/samples/switch_fixed.txt">fixed width</a>
-    </p>
+    <button class="btn btn-primary" type="submit">Validate and Load</button>
   </form>
   <article class="card">
-    <h3>Formats</h3>
-    <p><strong>CSV</strong> with a header <code>atm_code,txn_date,amount,txn_count</code>. Dates are YYYY-MM-DD. Amounts cannot be negative.</p>
-    <p style="margin-top:8px"><strong>Fixed width</strong>, 42 characters, no header: ATM code in 1–16, date YYYYMMDD in 17–24, whole rupees in 25–36, transaction count in 37–42.</p>
-    <p class="hint" style="margin-top:8px">A second row for the same ATM and date inside one file is rejected. Unknown ATM codes are rejected. Future dates are rejected.</p>
+    <h3>What to Include</h3>
+    <p>Each row needs the ATM code, the transaction date, the amount, and the transaction count. Dates use a calendar day. Amounts cannot be negative.</p>
+    <p class="hint" style="margin-top:8px">A second row for the same ATM and date in one batch is rejected. Unknown ATM codes are rejected. Future dates are rejected.</p>
   </article>
 </section>
 <section class="section">
-  <h2>Recent batches</h2>
+  <h2>Recent Batches</h2>
   <div class="table-wrap">
-    <table>
-      <thead><tr><th>Batch</th><th>File</th><th>Format</th><th>When</th><th class="num">Rows</th><th class="num">Loaded</th><th class="num">Errors</th><th>Status</th></tr></thead>
+    <table class="stack-rows">
+      <thead><tr><th>Batch</th><th>Source</th><th>Received</th><th class="num">Rows</th><th class="num">Accepted</th><th class="num">Rejected</th><th>Status</th></tr></thead>
       <tbody>
-        <% if (!batches.length) { %><tr><td colspan="8" class="empty">No switch files have been loaded.</td></tr><% } %>
+        <% if (!batches.length) { %><tr><td colspan="7" class="empty">No batches have been loaded.</td></tr><% } %>
         <% batches.forEach((batch) => { %>
           <tr>
-            <td><a href="/switch/<%= batch.batch_id %>"><%= batch.batch_id %></a></td>
-            <td><%= batch.filename %></td>
-            <td><%= batch.file_format %></td>
-            <td><%= prettyDateTime(batch.uploaded_at) %></td>
-            <td class="num"><%= batch.row_count %></td>
-            <td class="num"><%= batch.loaded_count %></td>
-            <td class="num"><%= batch.error_count %></td>
-            <td><span class="pill <%= String(batch.status).replace(/_/g, '-') %>"><%= label(batch.status) %></span></td>
+            <td data-label="Batch"><a href="/imports/<%= batch.batch_id %>"><%= batchName(batch) %></a></td>
+            <td data-label="Source"><%= sourceLabel(batch.source) %></td>
+            <td data-label="Received"><%= prettyDateTime(batch.uploaded_at) %></td>
+            <td class="num" data-label="Rows"><%= batch.row_count %></td>
+            <td class="num" data-label="Accepted"><%= batch.loaded_count %></td>
+            <td class="num" data-label="Rejected"><%= batch.error_count %></td>
+            <td data-label="Status"><span class="pill <%= String(batch.status).replace(/_/g, '-') %>"><%= label(batch.status) %></span></td>
           </tr>
         <% }) %>
       </tbody>

@@ -1,22 +1,21 @@
 <header class="page-head">
   <div>
-    <p class="eyebrow">Switch files</p>
-    <h1>Import history</h1>
-    <p class="lede">Every batch from a scheduled file, a manual upload, or the live feed. Times are India Standard Time.</p>
+    <p class="eyebrow">Bank Data</p>
+    <h1>Import History</h1>
+    <p class="lede">Every batch from a scheduled import, a manual upload, or the live feed. Times are India Standard Time.</p>
   </div>
 </header>
 <div class="table-wrap">
   <table class="stack-rows">
     <thead>
-      <tr><th>Batch</th><th>Source</th><th>File</th><th>Received (IST)</th><th class="num">Accepted</th><th class="num">Rejected</th><th>Status</th></tr>
+      <tr><th>Batch</th><th>Source</th><th>Received (IST)</th><th class="num">Accepted</th><th class="num">Rejected</th><th>Status</th></tr>
     </thead>
     <tbody>
-      <% if (!rows.length) { %><tr><td colspan="7" class="empty">No switch batches yet.</td></tr><% } %>
+      <% if (!rows.length) { %><tr><td colspan="6" class="empty">No imports yet.</td></tr><% } %>
       <% rows.forEach((row) => { %>
         <tr>
-          <td data-label="Batch"><a href="/imports/<%= row.batch_id %>"><%= row.batch_id %></a></td>
+          <td data-label="Batch"><a href="/imports/<%= row.batch_id %>"><%= batchName(row) %></a></td>
           <td data-label="Source"><%= sourceLabel(row.source) %></td>
-          <td data-label="File"><%= row.filename %></td>
           <td data-label="Received (IST)"><%= prettyDateTime(row.uploaded_at) %></td>
           <td class="num" data-label="Accepted"><%= row.loaded_count %></td>
           <td class="num" data-label="Rejected"><%= row.error_count %></td>

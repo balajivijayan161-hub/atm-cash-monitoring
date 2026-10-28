@@ -1,6 +1,6 @@
 const express = require('express');
 const { query } = require('../db');
-const { asyncRoute, renderPage, intOrNull, pageWindow } = require('../http');
+const { asyncRoute, renderPage, intOrNull, pageWindow, batchName } = require('../http');
 
 const router = express.Router();
 const PAGE_SIZE = 80;
@@ -16,7 +16,7 @@ router.get('/imports', asyncRoute(async (req, res) => {
     [PAGE_SIZE, window.offset]
   );
   renderPage(req, res, 'imports', {
-    title: 'Import history',
+    title: 'Import History',
     rows: rows.rows,
     page: window.page,
     pages: window.pages,
@@ -25,7 +25,7 @@ router.get('/imports', asyncRoute(async (req, res) => {
 
 router.get('/imports/:id', asyncRoute(async (req, res) => {
   const id = intOrNull(req.params.id);
-  if (!id) return renderPage(req, res, 'not-found', { title: 'Import not found', statusCode: 404 });
+  if (!id) return renderPage(req, res, 'not-found', { title: 'Import Not Found', statusCode: 404 });
   const [batch, rows] = await Promise.all([
     query(
       `SELECT batch_id, filename, source, file_format, uploaded_at, row_count, loaded_count, error_count, status
@@ -40,9 +40,9 @@ router.get('/imports/:id', asyncRoute(async (req, res) => {
       [id]
     ),
   ]);
-  if (!batch.rowCount) return renderPage(req, res, 'not-found', { title: 'Import not found', statusCode: 404 });
+  if (!batch.rowCount) return renderPage(req, res, 'not-found', { title: 'Import Not Found', statusCode: 404 });
   renderPage(req, res, 'import-detail', {
-    title: `Import ${id}`,
+    title: batchName(batch.rows[0]),
     batch: batch.rows[0],
     rows: rows.rows,
   });

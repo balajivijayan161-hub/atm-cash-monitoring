@@ -126,6 +126,43 @@ function prettyDateTime(value) {
   }).format(dt);
 }
 
+const SMALL_WORDS = new Set(['a', 'an', 'and', 'by', 'for', 'in', 'of', 'on', 'or', 'the', 'to', 'with']);
+
+function titleCase(value) {
+  const text = String(value || '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  return text.split(' ').map((word, index) => {
+    const lower = word.toLowerCase();
+    if (index > 0 && SMALL_WORDS.has(lower)) return lower;
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+  }).join(' ');
+}
+
+function sourceLabel(value) {
+  const key = String(value || 'manual').toLowerCase();
+  if (key === 'simulator') return 'Live Feed';
+  if (key === 'schedule') return 'Scheduled Import';
+  if (key === 'manual') return 'Manual Upload';
+  if (key === 'trigger') return 'Reconciliation';
+  if (key === 'monitor') return 'Bank Feed';
+  return titleCase(key);
+}
+
+function batchName(batch) {
+  if (!batch) return 'Feed Batch';
+  const when = batch.uploaded_at ? `${prettyDateTime(batch.uploaded_at)} IST` : '';
+  if (batch.source === 'simulator') return when ? `Bank Feed — ${when}` : 'Bank Feed';
+  if (batch.source === 'schedule') return when ? `Scheduled Import — ${when}` : 'Scheduled Import';
+  if (batch.source === 'manual') return when ? `Manual Upload — ${when}` : 'Manual Upload';
+  return `Feed Batch #${batch.batch_id}`;
+}
+
+function formatLabel(value) {
+  if (value === 'csv') return 'Spreadsheet';
+  if (value === 'fixed') return 'Fixed Width';
+  return titleCase(value);
+}
+
 function pageWindow(page, pageSize, total) {
   const size = Math.max(1, Number(pageSize) || 1);
   const count = Math.max(0, Number(total) || 0);
@@ -160,6 +197,10 @@ module.exports = {
   pct,
   prettyDate,
   prettyDateTime,
+  titleCase,
+  sourceLabel,
+  batchName,
+  formatLabel,
   pageHref,
   pageWindow,
 };

@@ -9,7 +9,7 @@ function parseSwitchFile(content, options = {}) {
     .filter((entry) => entry.raw.trim() !== '');
 
   if (!meaningful.length) {
-    return { format: null, rows: [], fileError: 'The file is empty.' };
+    return { format: null, rows: [], fileError: 'The upload is empty.' };
   }
 
   const format = meaningful[0].raw.includes(',') ? 'csv' : 'fixed';
@@ -32,7 +32,7 @@ function parseCsv(entries, today) {
       txnDate: null,
       amount: null,
       txnCount: null,
-      error: 'CSV must start with a header row: atm_code,txn_date,amount,txn_count',
+      error: 'The first row must name the ATM, date, amount, and transaction count.',
     }];
   }
   const index = Object.fromEntries(header.map((name, i) => [name, i]));
@@ -93,7 +93,7 @@ function parseCashLevel(value) {
 function parseFaultCode(value) {
   const text = String(value || '').trim().toLowerCase();
   if (!text) return { value: null };
-  if (!FAULT_CODES.has(text)) return { error: `Unknown fault code ${text}.` };
+  if (!FAULT_CODES.has(text)) return { error: 'Unknown fault.' };
   return { value: text };
 }
 
@@ -115,7 +115,7 @@ function parseFixed(entry, today) {
       txnDate: null,
       amount: null,
       txnCount: null,
-      error: `Fixed-width records must be ${FIXED_LENGTH} characters (this line has ${line.length}).`,
+      error: `This row is not the expected length (it has ${line.length} characters).`,
     };
   }
   return buildRow({

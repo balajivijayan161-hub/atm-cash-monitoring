@@ -51,7 +51,7 @@ router.get('/runs', asyncRoute(async (req, res) => {
   ]);
   const total = count.rows[0].total;
   renderPage(req, res, 'runs', {
-    title: 'Replenishment runs',
+    title: 'Replenishment Runs',
     rows: rows.rows,
     locations: locations.rows,
     plans: plans.rows,
@@ -106,7 +106,7 @@ router.get('/runs/new', asyncRoute(async (req, res) => {
     query(`SELECT (CURRENT_DATE + 1)::text AS tomorrow`),
   ]);
   renderPage(req, res, 'run-form', {
-    title: 'New replenishment run',
+    title: 'New Replenishment Run',
     action: '/runs',
     run: null,
     form: {
@@ -129,7 +129,7 @@ router.post('/runs', asyncRoute(async (req, res) => {
   if (saved.errors) {
     const ref = await loadReference();
     return renderPage(req, res, 'run-form', {
-      title: 'New replenishment run',
+      title: 'New Replenishment Run',
       action: '/runs',
       run: null,
       form: saved.form,
@@ -146,7 +146,7 @@ router.post('/runs', asyncRoute(async (req, res) => {
 router.get('/runs/:id', asyncRoute(async (req, res, next) => {
   if (req.params.id === 'new') return next();
   const id = intOrNull(req.params.id);
-  if (!id) return renderPage(req, res, 'not-found', { title: 'Run not found', statusCode: 404 });
+  if (!id) return renderPage(req, res, 'not-found', { title: 'Run Not Found', statusCode: 404 });
   const [run, loads, ref] = await Promise.all([
     query(
       `SELECT run_id, van_id, custodian_id, location_id, planned_date::text AS planned_date,
@@ -164,7 +164,7 @@ router.get('/runs/:id', asyncRoute(async (req, res, next) => {
     ),
     loadReference(),
   ]);
-  if (!run.rowCount) return renderPage(req, res, 'not-found', { title: 'Run not found', statusCode: 404 });
+  if (!run.rowCount) return renderPage(req, res, 'not-found', { title: 'Run Not Found', statusCode: 404 });
   const lines = loads.rows.map((row) => ({
     atmCode: row.atm_code,
     cassette: row.cassette_number,
@@ -174,7 +174,7 @@ router.get('/runs/:id', asyncRoute(async (req, res, next) => {
   }));
   const header = run.rows[0];
   renderPage(req, res, 'run-form', {
-    title: `Run ${header.run_id}`,
+    title: `Replenishment Run ${header.run_id}`,
     action: `/runs/${header.run_id}`,
     run: header,
     form: {
@@ -194,12 +194,12 @@ router.get('/runs/:id', asyncRoute(async (req, res, next) => {
 
 router.post('/runs/:id', asyncRoute(async (req, res) => {
   const id = intOrNull(req.params.id);
-  if (!id) return renderPage(req, res, 'not-found', { title: 'Run not found', statusCode: 404 });
+  if (!id) return renderPage(req, res, 'not-found', { title: 'Run Not Found', statusCode: 404 });
   const saved = await withTransaction((client) => saveRun(client, req.body, id));
   if (saved.errors) {
     const ref = await loadReference();
     return renderPage(req, res, 'run-form', {
-      title: `Run ${id}`,
+      title: `Replenishment Run ${id}`,
       action: `/runs/${id}`,
       run: { run_id: id, created_by: '' },
       form: saved.form,

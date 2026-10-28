@@ -1,15 +1,15 @@
 <header class="page-head">
   <div>
-    <p class="eyebrow"><%= sourceLabel(batch.source) %> · <%= batch.file_format %></p>
-    <h1><%= batch.filename %></h1>
-    <p class="lede">Received <%= prettyDateTime(batch.uploaded_at) %> IST. <%= batch.loaded_count %> accepted, <%= batch.error_count %> rejected, <%= batch.row_count %> rows in the file.</p>
+    <p class="eyebrow"><%= sourceLabel(batch.source) %></p>
+    <h1><%= batchName(batch) %></h1>
+    <p class="lede">Received <%= prettyDateTime(batch.uploaded_at) %> IST. <%= batch.loaded_count %> accepted, <%= batch.error_count %> rejected, of <%= batch.row_count %> rows.</p>
   </div>
-  <a class="btn" href="/imports">All imports</a>
+  <a class="btn" href="/imports">Import History</a>
 </header>
 <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>Line</th><th>ATM</th><th>Date</th><th class="num">Amount</th><th class="num">Count</th><th>Status</th><th>Rejection reason</th></tr>
+      <tr><th>Line</th><th>ATM</th><th>Date</th><th class="num">Amount</th><th class="num">Transactions</th><th>Status</th><th>Rejection Reason</th></tr>
     </thead>
     <tbody>
       <% rows.forEach((row) => { %>
@@ -19,7 +19,7 @@
           <td><%= row.txn_date ? prettyDate(row.txn_date) : '—' %></td>
           <td class="num"><%= row.amount == null ? '—' : inr(row.amount) %></td>
           <td class="num"><%= row.txn_count == null ? '—' : row.txn_count %></td>
-          <td><span class="pill <%= row.status %>"><%= row.status %></span></td>
+          <td><span class="pill <%= row.status %>"><%= label(row.status) %></span></td>
           <td><%= row.error_message || '—' %></td>
         </tr>
       <% }) %>

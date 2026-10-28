@@ -34,7 +34,7 @@ router.get('/reconciliations/new', asyncRoute(async (req, res) => {
     query('SELECT CURRENT_DATE::text AS today'),
   ]);
   renderPage(req, res, 'recon-form', {
-    title: 'New reconciliation',
+    title: 'New Reconciliation',
     atms: atms.rows,
     runs: runs.rows,
     form: {
@@ -100,7 +100,7 @@ router.post('/reconciliations', asyncRoute(async (req, res) => {
              LIMIT 40`),
     ]);
     return renderPage(req, res, 'recon-form', {
-      title: 'New reconciliation',
+      title: 'New Reconciliation',
       atms: atms.rows,
       runs: runs.rows,
       form,

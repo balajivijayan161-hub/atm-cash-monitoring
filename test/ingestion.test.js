@@ -52,7 +52,7 @@ test('optional switch columns do not change the original CSV shape', () => {
     { today: '2026-10-28' }
   );
   assert.match(extended.rows[0].error, /negative/i);
-  assert.match(extended.rows[0].error, /Unknown fault code/);
+  assert.match(extended.rows[0].error, /Unknown fault/);
   assert.match(extended.rows[0].error, /Online flag/);
 });
 
@@ -342,9 +342,9 @@ test('pages no longer describe the ledger as synthetic and imports are linked', 
   const home = await fetch(`${base}/`);
   const homeHtml = await home.text();
   assert.equal(home.status, 200);
-  assert.match(homeHtml, />Live feed</);
+  assert.match(homeHtml, />Live Feed</);
   assert.doesNotMatch(homeHtml, /simulator/i);
-  assert.match(homeHtml, /Cash alerts/);
+  assert.match(homeHtml, /Cash Alerts/);
   assert.match(homeHtml, /href="\/imports"/);
   assert.doesNotMatch(homeHtml, /synthetic|Demo data|sample data|fake data/i);
   const imports = await fetch(`${base}/imports`);
